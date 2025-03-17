@@ -3,12 +3,72 @@ Text-to-Speech synthesis pipeline combining TTS model and HiFiGAN vocoder
 """
 import torch
 import torch.nn as nn
-from typing import Optional
+import torch.nn.functional as F
+import torchaudio
+import torchaudio.transforms as T
+import numpy as np
+from typing import Optional, Tuple
 
 from .model import KenyanSwahiliTTS
 from .vocoder import HiFiGAN
 from .config import ModelConfig
 from .preprocessor import TextPreprocessor, SwahiliTokenizer
+
+class PitchShifter:
+    """Pitch shifting using phase vocoder"""
+    def __init__(self, sample_rate: int = 22050):
+        self.sample_rate = sample_rate
+        
+    def shift_pitch(self, audio: torch.Tensor, pitch_factor: float) -> torch.Tensor:
+        """
+        Shift the pitch of audio
+        Args:
+            audio: (batch_size, 1, time) Input audio
+            pitch_factor: Factor to shift pitch by (1.0 = no shift)
+        Returns:
+            (batch_size, 1, time) Pitch-shifted audio
+        """
+        if pitch_factor == 1.0:
+            return audio
+            
+        # Convert to frequency domain
+        n_fft = 2048
+        hop_length = n_fft // 4
+        
+        # Compute STFT
+        stft = torch.stft(
+            audio.squeeze(1),
+            n_fft=n_fft,
+            hop_length=hop_length,
+            window=torch.hann_window(n_fft).to(audio.device),
+            return_complex=True
+        )
+        
+        # Apply phase vocoder
+        time_steps = stft.size(1)
+        phase_advance = torch.linspace(0, np.pi * hop_length, n_fft // 2 + 1, device=audio.device)
+        phase = torch.angle(stft[:, 0])
+        
+        stft_stretched = []
+        for i in range(time_steps):
+            if i > 0:
+                phase_increment = torch.angle(stft[:, i]) - torch.angle(stft[:, i-1]) - phase_advance
+                phase_increment = phase_increment - 2 * np.pi * torch.round(phase_increment / (2 * np.pi))
+                phase = phase + phase_advance + phase_increment * pitch_factor
+            
+            stft_stretched.append(torch.abs(stft[:, i]) * torch.exp(1j * phase))
+        
+        stft_stretched = torch.stack(stft_stretched, dim=1)
+        
+        # Inverse STFT
+        audio_shifted = torch.istft(
+            stft_stretched,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            window=torch.hann_window(n_fft).to(audio.device)
+        )
+        
+        return audio_shifted.unsqueeze(1)
 
 class TextToSpeech:
     def __init__(self, 
@@ -34,6 +94,7 @@ class TextToSpeech:
         # Initialize models
         self.tts_model = KenyanSwahiliTTS(config).to(device)
         self.vocoder = HiFiGAN(config).to(device)
+        self.pitch_shifter = PitchShifter(config.sample_rate)
         
         # Set to evaluation mode
         self.tts_model.eval()
@@ -42,12 +103,14 @@ class TextToSpeech:
     @torch.no_grad()
     def generate_speech(self, 
                        text: str,
-                       speed_factor: float = 1.0) -> torch.Tensor:
+                       speed_factor: float = 1.0,
+                       pitch_factor: float = 1.0) -> torch.Tensor:
         """
         Generate speech from text
         Args:
             text: Input text (Swahili or mixed Swahili-English)
             speed_factor: Speech speed factor (1.0 = normal speed)
+            pitch_factor: Voice pitch factor (1.0 = normal pitch)
         Returns:
             waveform: (batch_size, 1, samples) Generated speech audio
         """
@@ -64,6 +127,10 @@ class TextToSpeech:
         
         # Convert mel-spectrogram to audio
         audio = self.vocoder.convert_mel_to_audio(mel_output)
+        
+        # Apply pitch shifting if needed
+        if pitch_factor != 1.0:
+            audio = self.pitch_shifter.shift_pitch(audio, pitch_factor)
         
         return audio
     
