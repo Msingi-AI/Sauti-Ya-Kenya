@@ -4,7 +4,7 @@ FastAPI-based REST API for the TTS service
 import io
 import torch
 import torchaudio
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -22,9 +22,13 @@ config = ModelConfig()
 tts_pipeline = TextToSpeech(config)
 
 class TTSRequest(BaseModel):
-    text: str = Field(..., description="Text to convert to speech (Swahili or mixed Swahili-English)")
-    speed: float = Field(1.0, ge=0.5, le=2.0, description="Speech speed factor (1.0 = normal speed)")
-    pitch: float = Field(1.0, ge=0.5, le=2.0, description="Voice pitch factor (1.0 = normal pitch)")
+    text: str = Field(..., 
+        description="Text to convert to speech (Swahili or mixed Swahili-English)",
+        example="Habari yako! How are you doing leo?")
+    speed: float = Field(1.0, ge=0.5, le=2.0, 
+        description="Speech speed factor (1.0 = normal speed)")
+    pitch: float = Field(1.0, ge=0.5, le=2.0, 
+        description="Voice pitch factor (1.0 = normal pitch)")
 
 @app.post("/synthesize")
 async def synthesize_speech(request: TTSRequest):
@@ -33,13 +37,9 @@ async def synthesize_speech(request: TTSRequest):
     Returns audio file in WAV format
     """
     try:
-        # TODO: Add text preprocessing and tokenization
-        # For now, using dummy text encodings
-        text_encodings = torch.randint(0, 100, (1, 10))  # Replace with actual text processing
-        
         # Generate audio
         audio = tts_pipeline.generate_speech(
-            text_encodings=text_encodings,
+            text=request.text,
             speed_factor=request.speed
         )
         
@@ -51,9 +51,30 @@ async def synthesize_speech(request: TTSRequest):
         return StreamingResponse(
             buffer,
             media_type="audio/wav",
-            headers={"Content-Disposition": 'attachment; filename="generated_speech.wav"'}
+            headers={
+                "Content-Disposition": 'attachment; filename="generated_speech.wav"'
+            }
         )
         
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/tokenize")
+async def tokenize_text(
+    text: str = Query(..., 
+        description="Text to tokenize",
+        example="Habari yako! How are you doing leo?")):
+    """
+    Tokenize text and show language detection results
+    Useful for debugging and understanding the text processing
+    """
+    try:
+        tokens = tts_pipeline.text_processor.process_text(text)
+        return {
+            "text": text,
+            "tokens": tokens.token_ids.tolist(),
+            "languages": tokens.languages
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -63,5 +84,6 @@ async def health_check():
     return {
         "status": "healthy",
         "model_loaded": True,
-        "device": tts_pipeline.device
+        "device": tts_pipeline.device,
+        "tokenizer_loaded": tts_pipeline.tokenizer.sp_model is not None
     }
