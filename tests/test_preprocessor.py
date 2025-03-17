@@ -2,16 +2,11 @@
 Tests for text preprocessing functionality
 """
 import pytest
-import torch
-from src.preprocessor import TextPreprocessor, SwahiliTokenizer
+from src.preprocessor import TextPreprocessor
 
 @pytest.fixture
-def tokenizer():
-    return SwahiliTokenizer(vocab_size=8000)
-
-@pytest.fixture
-def preprocessor(tokenizer):
-    return TextPreprocessor(tokenizer)
+def preprocessor():
+    return TextPreprocessor()
 
 def test_normalize_numbers(preprocessor):
     """Test number normalization"""
@@ -37,12 +32,12 @@ def test_normalize_expressions(preprocessor):
     for input_text, expected in tests:
         assert preprocessor.expressions[input_text] == expected
 
-def test_language_detection(preprocessor):
-    """Test language detection"""
-    text = "Hello! Habari yako?"
+def test_process_text(preprocessor):
+    """Test text processing pipeline"""
+    text = "Habari yako"
     tokens = preprocessor.process_text(text)
-    assert len(tokens.languages) == 2
-    assert "en" in tokens.languages
+    assert tokens.token_ids is not None
+    assert len(tokens.token_ids) > 0
     assert "sw" in tokens.languages
 
 def test_mixed_language_text(preprocessor):
@@ -50,7 +45,8 @@ def test_mixed_language_text(preprocessor):
     text = "I will come kesho asubuhi"
     tokens = preprocessor.process_text(text)
     assert len(tokens.token_ids) > 0
-    assert len(tokens.languages) > 0
+    assert "sw" in tokens.languages
+    assert "en" in tokens.languages
 
 def test_special_characters(preprocessor):
     """Test handling of special characters"""
