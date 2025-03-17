@@ -70,6 +70,58 @@ class PitchShifter:
         
         return audio_shifted.unsqueeze(1)
 
+class VoiceStyle:
+    """Voice style control parameters"""
+    def __init__(self,
+                 pitch_factor: float = 1.0,
+                 speed_factor: float = 1.0,
+                 energy_factor: float = 1.0,
+                 emotion: str = "neutral"):
+        """
+        Initialize voice style parameters
+        Args:
+            pitch_factor: Voice pitch modification (1.0 = normal)
+            speed_factor: Speech speed modification (1.0 = normal)
+            energy_factor: Voice energy/volume modification (1.0 = normal)
+            emotion: Emotion style ("neutral", "happy", "sad", "angry")
+        """
+        self.pitch_factor = pitch_factor
+        self.speed_factor = speed_factor
+        self.energy_factor = energy_factor
+        self.emotion = emotion
+        
+        # Emotion presets
+        self.emotion_presets = {
+            "neutral": {
+                "pitch": 1.0,
+                "speed": 1.0,
+                "energy": 1.0
+            },
+            "happy": {
+                "pitch": 1.2,
+                "speed": 1.1,
+                "energy": 1.2
+            },
+            "sad": {
+                "pitch": 0.9,
+                "speed": 0.9,
+                "energy": 0.8
+            },
+            "angry": {
+                "pitch": 1.1,
+                "speed": 1.2,
+                "energy": 1.4
+            }
+        }
+        
+    def apply_emotion(self):
+        """Apply emotion preset to factors"""
+        if self.emotion in self.emotion_presets:
+            preset = self.emotion_presets[self.emotion]
+            self.pitch_factor *= preset["pitch"]
+            self.speed_factor *= preset["speed"]
+            self.energy_factor *= preset["energy"]
+
 class TextToSpeech:
     def __init__(self, 
                  config: ModelConfig, 
@@ -103,17 +155,22 @@ class TextToSpeech:
     @torch.no_grad()
     def generate_speech(self, 
                        text: str,
-                       speed_factor: float = 1.0,
-                       pitch_factor: float = 1.0) -> torch.Tensor:
+                       style: Optional[VoiceStyle] = None) -> torch.Tensor:
         """
-        Generate speech from text
+        Generate speech from text with style control
         Args:
             text: Input text (Swahili or mixed Swahili-English)
-            speed_factor: Speech speed factor (1.0 = normal speed)
-            pitch_factor: Voice pitch factor (1.0 = normal pitch)
+            style: Voice style parameters
         Returns:
             waveform: (batch_size, 1, samples) Generated speech audio
         """
+        # Use default style if none provided
+        if style is None:
+            style = VoiceStyle()
+        
+        # Apply emotion preset if specified
+        style.apply_emotion()
+        
         # Process text
         tokens = self.text_processor.process_text(text)
         text_encodings = tokens.token_ids.to(self.device)
@@ -122,17 +179,43 @@ class TextToSpeech:
         mel_output, duration_pred = self.tts_model(text_encodings)
         
         # Adjust speed by scaling durations
-        if speed_factor != 1.0:
-            duration_pred = duration_pred * speed_factor
+        if style.speed_factor != 1.0:
+            duration_pred = duration_pred * style.speed_factor
         
         # Convert mel-spectrogram to audio
         audio = self.vocoder.convert_mel_to_audio(mel_output)
         
         # Apply pitch shifting if needed
-        if pitch_factor != 1.0:
-            audio = self.pitch_shifter.shift_pitch(audio, pitch_factor)
+        if style.pitch_factor != 1.0:
+            audio = self.pitch_shifter.shift_pitch(audio, style.pitch_factor)
+        
+        # Adjust energy/volume
+        if style.energy_factor != 1.0:
+            audio = audio * style.energy_factor
         
         return audio
+    
+    def create_style(self,
+                    pitch_factor: float = 1.0,
+                    speed_factor: float = 1.0,
+                    energy_factor: float = 1.0,
+                    emotion: str = "neutral") -> VoiceStyle:
+        """
+        Create a voice style configuration
+        Args:
+            pitch_factor: Voice pitch modification
+            speed_factor: Speech speed modification
+            energy_factor: Voice energy modification
+            emotion: Emotion style
+        Returns:
+            VoiceStyle object
+        """
+        return VoiceStyle(
+            pitch_factor=pitch_factor,
+            speed_factor=speed_factor,
+            energy_factor=energy_factor,
+            emotion=emotion
+        )
     
     def train_tokenizer(self, texts: list[str], output_path: str):
         """

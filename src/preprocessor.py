@@ -78,6 +78,7 @@ class TextPreprocessor:
             "8": "nane",
             "9": "tisa"
         }
+        
         # Common Kenyan Swahili expressions and their normalized forms
         self.expressions = {
             # Greetings and responses
@@ -89,7 +90,7 @@ class TextPreprocessor:
             "poa poa": "poa",
             "mambo": "mambo",
             "mambo vipi": "mambo",
-            "niaje": "niaje",
+            "niaje": "habari",
             "vipi": "vipi",
             "habari": "habari",
             "habari yako": "habari",
@@ -100,7 +101,7 @@ class TextPreprocessor:
             "pole sana": "pole",
             
             # Common phrases
-            "sasa": "sasa",
+            "sasa": "habari",
             "sasa hivi": "sasa",
             "hapa": "hapa",
             "pale": "pale",
@@ -167,9 +168,115 @@ class TextPreprocessor:
             "mashinani": "vijijini",
             "mtaa": "mtaa",
             "kijiji": "kijiji",
-            "shags": "nyumbani"
+            "shags": "nyumbani",
+            
+            # Extended Sheng expressions
+            # Greetings and responses
+            "niaje": "habari",
+            "sasa": "habari",
+            "poa": "nzuri",
+            "mos mos": "pole pole",
+            "rada": "nzuri",
+            "shida": "nzuri",
+            
+            # People and relationships
+            "maze": "rafiki",
+            "manze": "rafiki",
+            "bro": "ndugu",
+            "braza": "ndugu",
+            "mshikaji": "rafiki",
+            "msee": "mtu",
+            "matha": "mama",
+            "fatha": "baba",
+            "mbuyu": "rafiki",
+            "mboka": "rafiki",
+            "dem": "msichana",
+            "manzi": "msichana",
+            "mrembo": "msichana",
+            "chali": "kijana",
+            
+            # Places and locations
+            "mtaa": "mtaa",
+            "shags": "nyumbani",
+            "keja": "nyumba",
+            "kwangu": "nyumbani",
+            "kwetu": "nyumbani",
+            "mashinani": "vijijini",
+            "ghetto": "mtaa",
+            
+            # Transportation
+            "ndai": "gari",
+            "nduthi": "pikipiki",
+            "mat": "matatu",
+            "nganya": "matatu",
+            
+            # Money and business
+            "mshwari": "pesa",
+            "doo": "pesa",
+            "thao": "elfu",
+            "mbao": "ishirini",
+            "bob": "shilingi",
+            "mangwenje": "pesa",
+            
+            # Time and events
+            "mangware": "jioni",
+            "usiku poa": "usiku mwema",
+            "kesha": "kukesha",
+            "ringo": "saa",
+            
+            # Actions and states
+            "toa": "ondoka",
+            "enda": "ondoka",
+            "kula": "kula",
+            "lamba": "kula",
+            "nyonya": "kunywa",
+            "kata": "ondoka",
+            "zima": "lala",
+            
+            # Qualities and descriptions
+            "poa": "nzuri",
+            "fiti": "nzuri",
+            "moto": "nzuri sana",
+            "fresh": "nzuri",
+            "sharp": "sawa",
+            "proper": "nzuri",
+            "kubwa": "kubwa",
+            "ndogo": "ndogo",
+            
+            # Common phrases
+            "uko na": "una",
+            "ni kubwa": "ni nzuri",
+            "ni poa": "ni nzuri",
+            "tukutane": "tukutane",
+            "tuonane": "tuonane",
+            "niko na": "nina",
+            
+            # Modern tech terms
+            "simu": "simu",
+            "foni": "simu",
+            "net": "mtandao",
+            "wifi": "mtandao",
+            
+            # Emotions and feelings
+            "najam": "najisikia",
+            "niko high": "nina furaha",
+            "niko low": "nina huzuni",
+            "nimechoka": "nimechoka",
+            
+            # Food and drinks
+            "kanyagi": "kahawa",
+            "chai": "chai",
+            "chipo": "viazi",
+            "nyama": "nyama",
+            
+            # Emphasis and interjections
+            "kabisa": "kabisa",
+            "tu": "tu",
+            "sana": "sana",
+            "ati": "ati",
+            "kweli": "kweli"
         }
-
+    
     def normalize_numbers(self, text: str) -> str:
         """Convert numbers to Swahili words"""
         words = []
