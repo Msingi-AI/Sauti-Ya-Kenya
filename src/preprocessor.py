@@ -80,13 +80,96 @@ class TextPreprocessor:
         }
         # Common Kenyan Swahili expressions and their normalized forms
         self.expressions = {
+            # Greetings and responses
             "sawa": "sawa",
             "sawa sawa": "sawa",
             "uko": "uko",
             "uko sawa": "uko sawa",
-            # Add more common expressions
+            "poa": "poa",
+            "poa poa": "poa",
+            "mambo": "mambo",
+            "mambo vipi": "mambo",
+            "niaje": "niaje",
+            "vipi": "vipi",
+            "habari": "habari",
+            "habari yako": "habari",
+            "asante": "asante",
+            "asante sana": "asante",
+            "karibu": "karibu",
+            "pole": "pole",
+            "pole sana": "pole",
+            
+            # Common phrases
+            "sasa": "sasa",
+            "sasa hivi": "sasa",
+            "hapa": "hapa",
+            "pale": "pale",
+            "huko": "huko",
+            "kuja": "kuja",
+            "njoo": "njoo",
+            "tafadhali": "tafadhali",
+            "samahani": "samahani",
+            
+            # Time expressions
+            "leo": "leo",
+            "jana": "jana",
+            "kesho": "kesho",
+            "asubuhi": "asubuhi",
+            "mchana": "mchana",
+            "jioni": "jioni",
+            "usiku": "usiku",
+            
+            # Common adjectives
+            "nzuri": "nzuri",
+            "mbaya": "mbaya",
+            "kubwa": "kubwa",
+            "ndogo": "ndogo",
+            "nyingi": "nyingi",
+            "kidogo": "kidogo",
+            
+            # Common verbs
+            "kwenda": "kwenda",
+            "kuja": "kuja",
+            "kusema": "kusema",
+            "kufanya": "kufanya",
+            "kuwa": "kuwa",
+            
+            # Kenyan Sheng expressions (with standard Swahili mappings)
+            "maze": "rafiki",
+            "fisi": "mtu",
+            "mangware": "jioni",
+            "rada": "poa",
+            "kushu": "sawa",
+            "matha": "mama",
+            "fatha": "baba",
+            "ndai": "gari",
+            
+            # Question words
+            "nini": "nini",
+            "wapi": "wapi",
+            "lini": "lini",
+            "nani": "nani",
+            
+            # Common contractions
+            "siji": "sijui",
+            "uko'je": "uko vipi",
+            "u'do": "uko",
+            
+            # Emphasis and interjections
+            "kabisa": "kabisa",
+            "sana": "sana",
+            "ati": "ati",
+            "eh": "eh",
+            "ehe": "ehe",
+            "ai": "ai",
+            
+            # Location-specific terms
+            "mashinani": "vijijini",
+            "mtaa": "mtaa",
+            "kijiji": "kijiji",
+            "shags": "nyumbani"
         }
-        
+
     def normalize_numbers(self, text: str) -> str:
         """Convert numbers to Swahili words"""
         words = []
