@@ -1,10 +1,11 @@
 """
-HiFiGAN vocoder for high-quality speech synthesis
+HiFiGAN vocoder for converting mel-spectrograms to waveforms
 """
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import List, Optional
+import torchaudio
+from typing import List, Optional, Tuple
 from einops import rearrange
 
 class ResBlock(nn.Module):
@@ -81,6 +82,44 @@ class Generator(nn.Module):
         
         return x
 
+class MelSpectrogram(nn.Module):
+    """Mel-spectrogram transformation with customizable parameters"""
+    def __init__(self,
+                 sample_rate: int = 22050,
+                 n_fft: int = 1024,
+                 win_length: int = 1024,
+                 hop_length: int = 256,
+                 n_mels: int = 80,
+                 mel_fmin: float = 0.0,
+                 mel_fmax: float = 8000.0):
+        super().__init__()
+        self.mel_transform = torchaudio.transforms.MelSpectrogram(
+            sample_rate=sample_rate,
+            n_fft=n_fft,
+            win_length=win_length,
+            hop_length=hop_length,
+            n_mels=n_mels,
+            f_min=mel_fmin,
+            f_max=mel_fmax,
+            center=True,
+            power=1.0,  # Using amplitude spectrogram
+            norm="slaney",
+            mel_scale="slaney"
+        )
+        self.hop_length = hop_length
+        
+    def forward(self, audio: torch.Tensor) -> torch.Tensor:
+        """
+        Convert audio to mel-spectrogram
+        Args:
+            audio: (batch_size, 1, time)
+        Returns:
+            mel: (batch_size, n_mels, time)
+        """
+        mel = self.mel_transform(audio.squeeze(1))
+        mel = torch.log(torch.clamp(mel, min=1e-5))
+        return mel
+
 class PeriodDiscriminator(nn.Module):
     def __init__(self, period: int):
         super().__init__()
@@ -133,10 +172,16 @@ class MultiPeriodDiscriminator(nn.Module):
 
 class HiFiGAN(nn.Module):
     """HiFiGAN vocoder for converting mel-spectrograms to waveforms"""
-    def __init__(self):
+    def __init__(self, config=None):
         super().__init__()
         self.generator = Generator()
         self.mpd = MultiPeriodDiscriminator()
+        self.mel_transform = MelSpectrogram(
+            sample_rate=config.sample_rate if config else 22050,
+            n_mels=config.n_mel_channels if config else 80,
+            mel_fmin=config.mel_fmin if config else 0.0,
+            mel_fmax=config.mel_fmax if config else 8000.0
+        )
         
     def forward(self, mel: torch.Tensor) -> torch.Tensor:
         """
@@ -191,8 +236,15 @@ class HiFiGAN(nn.Module):
             'loss_mel': loss_mel
         }
     
-    @staticmethod
-    def mel_transform(audio: torch.Tensor) -> torch.Tensor:
-        """Convert audio to mel-spectrogram using torchaudio"""
-        # This will be implemented using torchaudio's MelSpectrogram
-        pass
+    def convert_mel_to_audio(self, mel: torch.Tensor) -> torch.Tensor:
+        """
+        Convert mel-spectrogram to audio waveform
+        Args:
+            mel: (batch_size, n_mel_channels, time)
+        Returns:
+            audio: (batch_size, 1, time * hop_length)
+        """
+        self.eval()
+        with torch.no_grad():
+            audio = self.forward(mel)
+        return audio
