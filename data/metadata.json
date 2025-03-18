@@ -8,5 +8,15 @@
     "timestamp": "20250318_154506",
     "sample_rate": 22050,
     "duration": 9.273469387755101
+  },
+  "Speaker_001_20250318_154651.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Niaje bro? Leo mambo iko aje?",
+    "timestamp": "20250318_154651",
+    "sample_rate": 22050,
+    "duration": 7.2359183673469385
   }
 }
