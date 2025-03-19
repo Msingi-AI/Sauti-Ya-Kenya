@@ -95,12 +95,9 @@ class DataPreprocessor:
 
     def load_metadata(self) -> Dict[str, Dict]:
         """Load metadata from all recording sessions"""
-        metadata = {}
-        for session_dir in self.data_dir.glob('**/metadata.json'):
-            with open(session_dir, 'r', encoding='utf-8') as f:
-                session_meta = json.load(f)
-                metadata[session_dir.parent.name] = session_meta
-        return metadata
+        metadata_file = self.data_dir / "metadata.json"
+        with open(metadata_file, 'r', encoding='utf-8') as f:
+            return json.load(f)
 
     def split_data(self, metadata: Dict[str, Dict]) -> tuple[List[str], List[str]]:
         """Split data into train and validation sets"""
@@ -136,7 +133,7 @@ class DataPreprocessor:
         example_dir.mkdir(parents=True, exist_ok=True)
         
         # Process audio
-        audio_path = str(self.data_dir / filename / 'audio.wav')
+        audio_path = str(self.data_dir / "recordings" / filename)
         processed_audio = self.audio_processor.process_audio(audio_path)
         
         # Process text
@@ -157,7 +154,7 @@ class DataPreprocessor:
 
 def main():
     preprocessor = DataPreprocessor(
-        data_dir='recordings',
+        data_dir='data',
         output_dir='processed_data'
     )
     preprocessor.process_dataset()
