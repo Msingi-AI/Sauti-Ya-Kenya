@@ -58,11 +58,11 @@ class LengthRegulator(nn.Module):
         self.duration_predictor = nn.Sequential(
             nn.Conv1d(d_model, d_model, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.LayerNorm(d_model),
+            nn.LayerNorm([d_model]),
             nn.Dropout(0.1),
             nn.Conv1d(d_model, d_model, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.LayerNorm(d_model),
+            nn.LayerNorm([d_model]),
             nn.Dropout(0.1),
             nn.Linear(d_model, 1)
         )
@@ -81,6 +81,9 @@ class LengthRegulator(nn.Module):
                 torch.round(torch.exp(duration_predictor_output) - 1),
                 min=0
             )
+
+        # Calculate maximum length
+        max_len = int(duration_rounded.sum(dim=1).max().item())
 
         # Regulate length
         expanded = []
