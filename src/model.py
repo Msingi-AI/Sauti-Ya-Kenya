@@ -193,6 +193,9 @@ class FastSpeech2(nn.Module):
                 src: torch.Tensor,
                 src_mask: Optional[torch.Tensor] = None,
                 duration_target: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+        # Create padding mask
+        src_pad_mask = (src != 0).unsqueeze(-2)  # [batch, 1, time]
+        
         # Encode
         encoder_output = self.encoder(src)
         

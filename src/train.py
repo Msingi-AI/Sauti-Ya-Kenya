@@ -76,13 +76,17 @@ def collate_fn(batch: List[Dict]) -> Dict[str, torch.Tensor]:
     
     # Fill tensors
     for i, item in enumerate(batch):
-        text = torch.tensor(item['text'])
+        text = torch.tensor(item['text'], dtype=torch.long)
         mel = item['mel']
         duration = item['duration']
         
-        text_padded[i, :text.size(0)] = text
-        mel_padded[i, :mel.size(0)] = mel
-        duration_padded[i, :duration.size(0)] = duration
+        text_len = len(text)
+        mel_len = mel.size(0)
+        dur_len = len(duration)
+        
+        text_padded[i, :text_len] = text
+        mel_padded[i, :mel_len] = mel
+        duration_padded[i, :dur_len] = duration
     
     return {
         'text': text_padded,
