@@ -223,18 +223,20 @@ class Trainer:
 def main():
     # Set device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f'Using device: {device}')
+    print(f"Using device: {device}")
     
-    # Data loading
+    # Initialize datasets
     train_dataset = TTSDataset('processed_data', split='train')
     val_dataset = TTSDataset('processed_data', split='val')
     
+    # Create data loaders
     train_loader = DataLoader(
         train_dataset,
         batch_size=32,
         shuffle=True,
         collate_fn=collate_fn,
-        num_workers=4
+        num_workers=2 if torch.cuda.is_available() else 0,
+        pin_memory=True if torch.cuda.is_available() else False
     )
     
     val_loader = DataLoader(
@@ -242,12 +244,13 @@ def main():
         batch_size=32,
         shuffle=False,
         collate_fn=collate_fn,
-        num_workers=4
+        num_workers=2 if torch.cuda.is_available() else 0,
+        pin_memory=True if torch.cuda.is_available() else False
     )
     
-    # Model initialization
+    # Initialize model
     model = FastSpeech2(
-        vocab_size=8000,  # Match with tokenizer vocab size
+        vocab_size=10000,  # Update this based on your tokenizer
         d_model=384,
         n_enc_layers=4,
         n_dec_layers=4,
@@ -257,17 +260,18 @@ def main():
         dropout=0.1
     ).to(device)
     
-    # Optimizer and scheduler
+    # Initialize optimizer and scheduler
     optimizer = AdamW(model.parameters(), lr=0.001, weight_decay=0.01)
     scheduler = OneCycleLR(
         optimizer,
         max_lr=0.001,
         epochs=100,
         steps_per_epoch=len(train_loader),
-        pct_start=0.1
+        pct_start=0.1,
+        anneal_strategy='cos'
     )
     
-    # Loss function
+    # Initialize loss function
     loss_fn = TTSLoss().to(device)
     
     # Initialize trainer
@@ -282,7 +286,7 @@ def main():
         checkpoint_dir='checkpoints'
     )
     
-    # Start training
+    # Train model
     trainer.train(num_epochs=100)
 
 if __name__ == '__main__':
