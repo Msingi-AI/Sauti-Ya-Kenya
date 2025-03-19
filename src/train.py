@@ -94,186 +94,165 @@ def collate_fn(batch: List[Dict]) -> Dict[str, torch.Tensor]:
         'duration': duration_padded
     }
 
+class TTSLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.l1_loss = nn.L1Loss()
+        self.mse_loss = nn.MSELoss()
+        
+    def forward(self, mel_output, mel_target, duration_pred, duration_target):
+        """Calculate total loss.
+        
+        Args:
+            mel_output (Tensor): Predicted mel spectrogram [B, T', M]
+            mel_target (Tensor): Target mel spectrogram [B, T', M]
+            duration_pred (Tensor): Predicted durations [B, T]
+            duration_target (Tensor): Target durations [B, T]
+            
+        Returns:
+            Tensor: Total loss value
+        """
+        # Ensure same length for mel spectrograms
+        min_len = min(mel_output.size(1), mel_target.size(1))
+        mel_output = mel_output[:, :min_len, :]
+        mel_target = mel_target[:, :min_len, :]
+        
+        # Calculate losses
+        mel_loss = self.l1_loss(mel_output, mel_target)
+        duration_loss = self.mse_loss(duration_pred.float(), duration_target.float())
+        
+        # Total loss
+        total_loss = mel_loss + duration_loss
+        
+        return total_loss
+
 class Trainer:
-    def __init__(
-        self,
-        model,
-        train_loader,
-        val_loader,
-        optimizer,
-        scheduler,
-        loss_fn,
-        device,
-        checkpoint_dir,
-        gradient_accumulation_steps=4
-    ):
+    def __init__(self, model, train_loader, val_loader, optimizer, device,
+                 checkpoint_dir, grad_accum_steps=1):
         self.model = model
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.optimizer = optimizer
-        self.scheduler = scheduler
-        self.loss_fn = loss_fn
         self.device = device
         self.checkpoint_dir = checkpoint_dir
-        self.gradient_accumulation_steps = gradient_accumulation_steps
+        self.grad_accum_steps = grad_accum_steps
+        self.loss_fn = TTSLoss()
+        
+        # Create checkpoint directory
+        os.makedirs(checkpoint_dir, exist_ok=True)
         
     def train_epoch(self):
         self.model.train()
         total_loss = 0
-        num_batches = len(self.train_loader)
         
-        print("Starting training epoch...")
-        progress_bar = tqdm(total=num_batches, desc="Training")
+        # Zero gradients at the start
+        self.optimizer.zero_grad()
         
-        self.optimizer.zero_grad()  # Zero gradients at start of epoch
-        
-        for batch_idx, batch in enumerate(self.train_loader):
+        for batch_idx, (text, mel, duration) in enumerate(tqdm(self.train_loader, desc="Training")):
             print(f"Processing batch {batch_idx}...")
             
-            # Get batch data
-            text = batch['text'].to(self.device)
-            mel = batch['mel'].to(self.device)
-            duration = batch['duration'].to(self.device)
+            # Move data to device
+            text = text.to(self.device)
+            mel = mel.to(self.device)
+            duration = duration.to(self.device)
             
             print(f"Shapes: {text.shape} {mel.shape} {duration.shape}")
             print("Forward pass...")
             
             # Forward pass
-            mel_output, duration_pred = self.model(text, duration_target=duration)
+            mel_output, duration_pred = self.model(text, duration)
             
             # Calculate loss
             loss = self.loss_fn(mel_output, mel, duration_pred, duration)
             
             # Scale loss for gradient accumulation
-            loss = loss / self.gradient_accumulation_steps
+            loss = loss / self.grad_accum_steps
             
             # Backward pass
             loss.backward()
             
-            # Update weights if we've accumulated enough gradients
-            if (batch_idx + 1) % self.gradient_accumulation_steps == 0:
+            # Update weights if needed
+            if (batch_idx + 1) % self.grad_accum_steps == 0:
                 # Clip gradients
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                 
+                # Optimizer step
                 self.optimizer.step()
-                self.scheduler.step()
                 self.optimizer.zero_grad()
             
-            total_loss += loss.item() * self.gradient_accumulation_steps
+            # Track loss
+            total_loss += loss.item() * self.grad_accum_steps
             
-            progress_bar.update(1)
-            progress_bar.set_postfix({'loss': loss.item() * self.gradient_accumulation_steps})
-            
-            # Free up memory
-            del mel_output, duration_pred, loss
-            torch.cuda.empty_cache()
+            # Clear cache
+            if hasattr(torch.cuda, 'empty_cache'):
+                torch.cuda.empty_cache()
         
-        progress_bar.close()
-        return {'loss': total_loss / num_batches}
-
-    def validate(self) -> dict:
+        return total_loss / len(self.train_loader)
+    
+    def validate(self):
         self.model.eval()
         total_loss = 0
         
         with torch.no_grad():
-            with tqdm(self.val_loader, desc='Validation') as pbar:
-                for batch in pbar:
-                    # Move batch to device
-                    text = batch['text'].to(self.device)
-                    mel = batch['mel'].to(self.device)
-                    duration = batch['duration'].to(self.device)
-                    
-                    # Forward pass
-                    mel_output, duration_pred = self.model(text, duration_target=duration)
-                    
-                    # Calculate loss
-                    loss = self.loss_fn(mel_output, mel, duration_pred, duration)
-                    
-                    # Update progress
-                    total_loss += loss.item()
-                    pbar.set_postfix(loss=f'{loss.item():.4f}')
+            for text, mel, duration in tqdm(self.val_loader, desc="Validation"):
+                # Move data to device
+                text = text.to(self.device)
+                mel = mel.to(self.device)
+                duration = duration.to(self.device)
+                
+                # Forward pass
+                mel_output, duration_pred = self.model(text, duration)
+                
+                # Calculate loss
+                loss = self.loss_fn(mel_output, mel, duration_pred, duration)
+                total_loss += loss.item()
         
-        return {'loss': total_loss / len(self.val_loader)}
-
-    def save_checkpoint(self, epoch: int, loss: float):
-        checkpoint = {
-            'epoch': epoch,
-            'model_state_dict': self.model.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict(),
-            'scheduler_state_dict': self.scheduler.state_dict(),
-            'loss': loss,
-            'best_loss': self.best_loss,
-            'epochs_without_improvement': self.epochs_without_improvement
-        }
-        
-        # Save latest checkpoint
-        torch.save(checkpoint, self.checkpoint_dir / 'latest.pt')
-        
-        # Save best checkpoint
-        if loss < self.best_loss:
-            self.best_loss = loss
-            self.epochs_without_improvement = 0
-            torch.save(checkpoint, self.checkpoint_dir / 'best.pt')
-            print(f"New best model saved! Loss: {loss:.4f}")
-        else:
-            self.epochs_without_improvement += 1
-            
-        # Save periodic checkpoint (every 10 epochs)
-        if (epoch + 1) % 10 == 0:
-            torch.save(checkpoint, self.checkpoint_dir / f'checkpoint_epoch_{epoch+1}.pt')
-            print(f"Saved periodic checkpoint at epoch {epoch+1}")
-
-    def load_checkpoint(self, checkpoint_path: str) -> int:
-        print(f"Loading checkpoint from {checkpoint_path}")
-        checkpoint = torch.load(checkpoint_path, map_location=self.device)
-        
-        self.model.load_state_dict(checkpoint['model_state_dict'])
-        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-        self.best_loss = checkpoint['best_loss']
-        self.epochs_without_improvement = checkpoint['epochs_without_improvement']
-        
-        return checkpoint['epoch']
-
-    def train(self, num_epochs: int, resume_from: Optional[str] = None):
+        return total_loss / len(self.val_loader)
+    
+    def train(self, num_epochs, resume_from=None):
         start_epoch = 0
+        best_loss = float('inf')
+        
+        # Load checkpoint if resuming
         if resume_from:
-            start_epoch = self.load_checkpoint(resume_from) + 1
-            print(f"Resuming training from epoch {start_epoch}")
+            checkpoint = torch.load(resume_from)
+            self.model.load_state_dict(checkpoint['model_state_dict'])
+            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            start_epoch = checkpoint['epoch']
+            best_loss = checkpoint.get('best_loss', float('inf'))
         
         for epoch in range(start_epoch, num_epochs):
-            print(f'\nEpoch {epoch + 1}/{num_epochs}')
+            print(f"\nEpoch {epoch + 1}/{num_epochs}")
+            print("Starting training epoch...")
             
-            # Training phase
-            train_metrics = self.train_epoch()
-            print(f'Training Loss: {train_metrics["loss"]:.4f}')
+            # Train
+            train_loss = self.train_epoch()
+            print(f"Training Loss: {train_loss:.4f}")
             
-            # Validation phase
-            val_metrics = self.validate()
-            print(f'Validation Loss: {val_metrics["loss"]:.4f}')
+            # Validate
+            val_loss = self.validate()
+            print(f"Validation Loss: {val_loss:.4f}")
             
             # Save checkpoint
-            self.save_checkpoint(epoch, val_metrics['loss'])
+            is_best = val_loss < best_loss
+            best_loss = min(val_loss, best_loss)
             
-            # Early stopping
-            if self.epochs_without_improvement >= self.max_epochs_without_improvement:
-                print(f"No improvement for {self.max_epochs_without_improvement} epochs. Stopping training.")
-                break
-
-class TTSLoss(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.mse_loss = nn.MSELoss()
-        self.l1_loss = nn.L1Loss()
-        
-    def forward(self, mel_output, mel_target, duration_pred, duration_target):
-        mel_loss = self.l1_loss(mel_output, mel_target)
-        duration_loss = self.mse_loss(duration_pred.float(), duration_target.float())
-        
-        # Total loss is weighted sum
-        total_loss = mel_loss + duration_loss
-        
-        return total_loss
+            checkpoint = {
+                'epoch': epoch + 1,
+                'model_state_dict': self.model.state_dict(),
+                'optimizer_state_dict': self.optimizer.state_dict(),
+                'train_loss': train_loss,
+                'val_loss': val_loss,
+                'best_loss': best_loss
+            }
+            
+            # Save latest checkpoint
+            torch.save(checkpoint, os.path.join(self.checkpoint_dir, 'latest.pt'))
+            
+            # Save best checkpoint
+            if is_best:
+                torch.save(checkpoint, os.path.join(self.checkpoint_dir, 'best.pt'))
+                print("Saved new best model!")
 
 def main():
     import argparse
@@ -342,30 +321,15 @@ def main():
         anneal_strategy='cos'
     )
     
-    # Initialize loss function
-    loss_fn = TTSLoss().to(device)
-    
-    # Handle checkpoint directory
-    checkpoint_dir = Path('checkpoints')
-    if not checkpoint_dir.is_dir():
-        try:
-            checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        except FileExistsError:
-            # If it exists but is a symlink, that's fine
-            if not checkpoint_dir.is_symlink():
-                raise
-    
     # Initialize trainer
     trainer = Trainer(
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
         optimizer=optimizer,
-        scheduler=scheduler,
-        loss_fn=loss_fn,
         device=device,
-        checkpoint_dir=checkpoint_dir,
-        gradient_accumulation_steps=args.grad_accum
+        checkpoint_dir='checkpoints',
+        grad_accum_steps=args.grad_accum
     )
     
     # Train model
