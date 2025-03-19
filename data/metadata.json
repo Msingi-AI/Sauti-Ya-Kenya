@@ -28,5 +28,95 @@
     "timestamp": "20250318_155246",
     "sample_rate": 22050,
     "duration": 3.5787755102040815
+  },
+  "Speaker_001_20250319_101219.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Habari, una shida gani leo?",
+    "timestamp": "20250319_101219",
+    "sample_rate": 22050,
+    "duration": 4.571428571428571
+  },
+  "Speaker_001_20250319_101253.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Technology inachange education, sasa tuko na online classes",
+    "timestamp": "20250319_101253",
+    "sample_rate": 22050,
+    "duration": 5.903673469387755
+  },
+  "Speaker_001_20250319_101322.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Assignment yenu ni kufanya research kuhusu climate change na effects zake Kenya.",
+    "timestamp": "20250319_101322",
+    "sample_rate": 22050,
+    "duration": 5.485714285714286
+  },
+  "Speaker_001_20250319_101348.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Haya, let\u2019s switch to English kidogo, what is the main theme of this book?",
+    "timestamp": "20250319_101348",
+    "sample_rate": 22050,
+    "duration": 4.911020408163266
+  },
+  "Speaker_001_20250319_101427.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Kama hujaelewa, tafadhali uliza maswali before class iishe.",
+    "timestamp": "20250319_101427",
+    "sample_rate": 22050,
+    "duration": 4.284081632653061
+  },
+  "Speaker_001_20250319_101508.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Delivery ni free kama uko Nairobi CBD, lakini kama uko nje, kuna extra charges",
+    "timestamp": "20250319_101508",
+    "sample_rate": 22050,
+    "duration": 5.69469387755102
+  },
+  "Speaker_001_20250319_101543.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Tafadhali angalia terms and conditions kabla ya kufanya purchase",
+    "timestamp": "20250319_101543",
+    "sample_rate": 22050,
+    "duration": 5.276734693877551
+  },
+  "Speaker_001_20250319_101618.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Hii Product ni original kabisa, na iko na warranty ya six months.",
+    "timestamp": "20250319_101618",
+    "sample_rate": 22050,
+    "duration": 4.388571428571429
+  },
+  "Speaker_001_20250319_101646.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Boss, tunapokea M-Pesa ama cash tu?",
+    "timestamp": "20250319_101646",
+    "sample_rate": 22050,
+    "duration": 3.213061224489796
   }
 }
