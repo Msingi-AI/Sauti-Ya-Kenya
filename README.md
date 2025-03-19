@@ -1,20 +1,43 @@
-# Sauti Ya Kenya 🎙️
+# 🎙️ Sauti Ya Kenya
 
-A Text-to-Speech (TTS) model for Kenyan Swahili using FastSpeech 2 architecture. This project aims to create a high-quality, natural-sounding voice synthesis system specifically designed for Kenyan Swahili speakers, capturing our unique expressions, code-switching patterns, and authentic accent.
+<div align="center">
 
-## Features 🌟
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-orange.svg)](https://pytorch.org/)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Msingi-AI/Sauti-Ya-Kenya/blob/main/notebooks/sauti_ya_kenya_training.ipynb)
 
-- FastSpeech 2 architecture for fast, high-quality speech synthesis
-- Support for Kenyan Swahili language features:
-  - Natural code-switching between Swahili and English
-  - Local expressions and idioms
-  - Authentic Kenyan accent and intonation patterns
-- User-friendly data collection tool with GUI interface
-- Robust preprocessing pipeline
-- GPU-accelerated training with checkpoint support
-- Easy-to-use inference API
+<img src="docs/images/logo.png" alt="Sauti Ya Kenya Logo" width="200"/>
 
-## Getting Started 🚀
+*Bringing Kenyan Swahili voices to life through AI* 🇰🇪
+
+[Getting Started](#getting-started) •
+[Features](#features) •
+[Documentation](#documentation) •
+[Contributing](#contributing) •
+[Contact](#contact)
+
+</div>
+
+---
+
+## 🌟 Overview
+
+Sauti Ya Kenya is a state-of-the-art Text-to-Speech (TTS) system specifically designed for Kenyan Swahili. Our model handles:
+- 🗣️ Natural Kenyan Swahili pronunciation
+- 🔄 Code-switching between Swahili and English
+- 📢 Multiple speaker voices
+- 🎯 Local expressions and idioms
+
+## ✨ Features
+
+- **High-Quality Speech** - FastSpeech 2 architecture for fast, high-fidelity voice synthesis
+- **Code-Switching** - Seamlessly handles mixed Swahili-English text
+- **Local Optimization** - Tuned specifically for Kenyan Swahili phonetics
+- **Easy Integration** - Simple API for quick integration into your projects
+- **Memory Efficient** - Optimized for training on Google Colab
+
+## 🚀 Getting Started
 
 ### Prerequisites
 
@@ -29,14 +52,12 @@ soundfile
 
 ### Installation
 
-1. Clone the repository:
 ```bash
+# Clone the repository
 git clone https://github.com/Msingi-AI/Sauti-Ya-Kenya.git
 cd Sauti-Ya-Kenya
-```
 
-2. Install dependencies:
-```bash
+# Install dependencies
 pip install -r requirements.txt
 ```
 
@@ -269,20 +290,30 @@ The model includes special handling for:
 - Kenyan English accent patterns
 - Common abbreviations and numerals
 
-## License 📝
+## 📞 Contact & Support
 
-To be Determined
-## Acknowledgments 🙏
+- **Email**: [information.msingiai@gmail.com](mailto:information.msingiai@gmail.com)
+- **Issues**: [GitHub Issues](https://github.com/Msingi-AI/Sauti-Ya-Kenya/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/Msingi-AI/Sauti-Ya-Kenya/discussions)
 
-- FastSpeech 2 paper authors
-- Contributing voice talent
-- Kenyan Swahili language experts
-- [Add other acknowledgments]
+## 🤝 Contributing
 
-## Contact 📧
+We welcome contributions! See our [Contributing Guidelines](CONTRIBUTING.md) for details on:
+- Setting up your development environment
+- Recording voice data
+- Submitting pull requests
+- Code style guidelines
 
-information.msingiai@gmail.com
+Please read our [Code of Conduct](CODE_OF_CONDUCT.md) before contributing.
+
+## 📜 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-Made with ❤️ by Msingi AI
+<div align="center">
+
+Made with ❤️ by [Msingi AI](https://github.com/Msingi-AI)
+
+</div>

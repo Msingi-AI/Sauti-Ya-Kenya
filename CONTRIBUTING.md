@@ -1,127 +1,163 @@
-# Contributing to Sauti Ya Kenya
+# Contributing to Sauti Ya Kenya 🎙️
 
-Thank you for your interest in contributing to Sauti Ya Kenya! This document provides guidelines and instructions for contributing to the project.
+<div align="center">
 
-## Ways to Contribute
+*Help us bring Kenyan Swahili voices to life!* 🇰🇪
 
-1. **Voice Data Contributions**
-   - Record Kenyan Swahili speech using our data collection tool
-   - Review and validate existing recordings
-   - Help create text prompts for recording sessions
+</div>
 
-2. **Code Contributions**
-   - Fix bugs and issues
-   - Implement new features
-   - Improve documentation
+First off, thank you for considering contributing to Sauti Ya Kenya! Every contribution helps make this project better for the Kenyan Swahili-speaking community.
+
+## 📞 Contact
+
+- **Email**: [information.msingiai@gmail.com](mailto:information.msingiai@gmail.com)
+- **Issues**: [GitHub Issues](https://github.com/Msingi-AI/Sauti-Ya-Kenya/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/Msingi-AI/Sauti-Ya-Kenya/discussions)
+
+## 🚀 Ways to Contribute
+
+1. **Voice Recording**
+   - Record Swahili speech samples
+   - Help validate recordings
+   - Transcribe audio data
+
+2. **Code Development**
+   - Fix bugs
+   - Add features
+   - Improve performance
    - Write tests
-   - Optimize performance
 
-3. **Language Expertise**
-   - Help improve text preprocessing for Kenyan Swahili
-   - Validate language detection and code-switching
-   - Review and enhance pronunciation rules
+3. **Documentation**
+   - Improve guides
+   - Fix typos
+   - Add examples
+   - Translate docs
 
-## Development Setup
+4. **Testing**
+   - Test the model
+   - Report bugs
+   - Suggest improvements
 
-1. Fork the repository
-2. Clone your fork:
-   ```bash
-   git clone https://github.com/your-username/Sauti-Ya-Kenya.git
-   cd Sauti-Ya-Kenya
-   ```
-3. Create a new branch:
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-4. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   pip install -r requirements-dev.txt  # Development dependencies
-   ```
+## 🎯 Development Setup
 
-## Code Style Guidelines
-
-- Follow PEP 8 style guide for Python code
-- Use type hints for function parameters and return values
-- Write docstrings for all functions and classes
-- Keep functions focused and single-purpose
-- Use descriptive variable names
-- Comment complex logic
-
-Example:
-```python
-def process_text(text: str) -> List[str]:
-    """Process input text for TTS generation.
-    
-    Args:
-        text: Input text to process
-        
-    Returns:
-        List of processed tokens
-        
-    Raises:
-        ValueError: If text is empty or invalid
-    """
-    if not text:
-        raise ValueError("Text cannot be empty")
-    # Implementation...
+1. Fork and clone the repository:
+```bash
+git clone https://github.com/YOUR_USERNAME/Sauti-Ya-Kenya.git
+cd Sauti-Ya-Kenya
 ```
 
-## Testing
+2. Create a virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# OR
+venv\\Scripts\\activate  # Windows
+```
 
-- Write unit tests for new features
-- Update existing tests when modifying code
-- Run tests before submitting PR:
-  ```bash
-  pytest
-  ```
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
 
-## Pull Request Process
+## 🎤 Voice Recording Guidelines
 
-1. Update documentation if needed
-2. Add tests for new features
-3. Run all tests and ensure they pass
-4. Update CHANGELOG.md with your changes
-5. Submit PR with clear description of changes
-6. Wait for review and address any feedback
+1. **Equipment**
+   - Quiet room
+   - Good quality microphone
+   - Stable recording setup
 
-## Voice Recording Guidelines
+2. **Recording Process**
+   - Use our GUI tool: `python -m src.data_collection`
+   - Follow prompts for metadata
+   - Maintain consistent volume
+   - Speak naturally
 
-See the [README.md](README.md#contributing-voice-data-) for detailed voice recording guidelines.
+3. **Content Guidelines**
+   - Clear pronunciation
+   - Natural code-switching
+   - Various sentence types
+   - Different emotional tones
 
-## Code Review Process
+## 💻 Code Contribution Guidelines
 
-All submissions require review. We use GitHub pull requests for this purpose.
+1. **Code Style**
+   - Follow PEP 8
+   - Use type hints
+   - Write docstrings
+   - Comment complex logic
 
-1. Submit a pull request
-2. Automated tests will run
-3. Maintainers will review your code
-4. Address any feedback
-5. Once approved, your code will be merged
+2. **Pull Request Process**
+   - Create feature branch
+   - Write clear commit messages
+   - Update documentation
+   - Add tests if applicable
 
-## Community Guidelines
+3. **Testing**
+   - Run existing tests
+   - Add new tests
+   - Check GPU memory usage
+   - Verify Colab compatibility
 
-- Be respectful and inclusive
-- Help others when you can
-- Ask questions if you're unsure
-- Report bugs and issues
-- Follow the code of conduct
+## 📝 Documentation Guidelines
 
-## Getting Help
+1. **Code Documentation**
+   - Clear docstrings
+   - Type hints
+   - Usage examples
+   - Performance notes
 
-- Open an issue for bugs
-- Discuss features in Issues
-- Join our community chat
-- Contact maintainers directly
+2. **README Updates**
+   - Clear instructions
+   - Accurate prerequisites
+   - Updated features
+   - Current contact info
 
-## License
+## ⚖️ Code Review Process
 
-By contributing, you agree that your contributions will be licensed under the project's license.
+1. **Initial Review**
+   - Code style check
+   - Documentation review
+   - Test coverage
+   - Performance impact
 
-## Contact
+2. **Feedback Loop**
+   - Address comments
+   - Update changes
+   - Re-request review
+   - Final approval
 
-[Add contact information]
+## 📊 Issue Reporting
+
+When reporting issues, include:
+- Clear description
+- Steps to reproduce
+- Expected behavior
+- Actual behavior
+- System information
+- Error messages
+
+## 🤝 Community Guidelines
+
+- Be respectful
+- Help others learn
+- Share knowledge
+- Give constructive feedback
+- Follow our [Code of Conduct](CODE_OF_CONDUCT.md)
+
+## ✨ Recognition
+
+Contributors will be:
+- Listed in our README
+- Mentioned in release notes
+- Credited for specific features
+- Part of our growing community
 
 ---
 
-Thank you for helping make Sauti Ya Kenya better! 🎙️
+<div align="center">
+
+Questions? Email us at [information.msingiai@gmail.com](mailto:information.msingiai@gmail.com)
+
+Made with ❤️ by [Msingi AI](https://github.com/Msingi-AI)
+
+</div>
