@@ -304,9 +304,15 @@ def main():
     # Initialize loss function
     loss_fn = TTSLoss().to(device)
     
-    # Create checkpoints directory
+    # Handle checkpoint directory
     checkpoint_dir = Path('checkpoints')
-    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    if not checkpoint_dir.is_dir():
+        try:
+            checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        except FileExistsError:
+            # If it exists but is a symlink, that's fine
+            if not checkpoint_dir.is_symlink():
+                raise
     
     # Initialize trainer
     trainer = Trainer(
