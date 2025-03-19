@@ -119,14 +119,25 @@ python -m src.train
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Msingi-AI/Sauti-Ya-Kenya/blob/main/notebooks/train_on_colab.ipynb)
 
-Click the badge above to open the training notebook in Google Colab. The notebook will:
+Click the badge above to open the training notebook in Google Colab. For optimal training with GPU memory management:
+
+```bash
+# Start training with memory optimization
+python -m src.train --batch_size 8 --grad_accum 4
+```
+
+Key Parameters:
+- `batch_size`: 8 (reduced from 32 to save memory)
+- `grad_accum`: 4 (gradient accumulation steps)
+
+The notebook will:
 1. Mount your Google Drive for persistent storage
 2. Set up a clean environment (removing any stale symlinks)
 3. Clone the latest code
 4. Install dependencies
 5. Upload and extract your data (if needed)
 6. Find existing checkpoints (if any)
-7. Train the model with GPU acceleration
+7. Train the model with GPU acceleration and memory optimization
 8. Save checkpoints to your Drive
 
 This allows you to:
@@ -137,9 +148,16 @@ This allows you to:
 
 The notebook includes verification steps to ensure:
 - GPU is properly configured
+- Memory usage is optimized
 - Data is correctly loaded
 - Checkpoints are properly managed
 - Directory structure is clean
+
+Memory Management:
+- Uses gradient accumulation to reduce memory usage
+- Cleans up CUDA cache between batches
+- Monitors GPU memory usage
+- Sets optimal PyTorch memory allocator settings
 
 ### Resuming Training
 
