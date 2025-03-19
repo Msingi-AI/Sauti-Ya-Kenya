@@ -7,7 +7,6 @@ import numpy as np
 from typing import List, Tuple, Dict, Optional
 from dataclasses import dataclass
 from transformers import PreTrainedTokenizer
-from polyglot.detect import Detector
 import sentencepiece as spm
 
 @dataclass
@@ -18,359 +17,216 @@ class TextTokens:
     attention_mask: Optional[torch.Tensor] = None
 
 class SwahiliTokenizer:
-    """Custom tokenizer for Kenyan Swahili with code-switching support"""
+    """Simple tokenizer for Swahili text"""
     def __init__(self, vocab_size: int = 8000):
         self.vocab_size = vocab_size
-        self.sp_model = None
-        self.special_tokens = {
-            "<pad>": 0,
-            "<unk>": 1,
-            "<s>": 2,
-            "</s>": 3,
-            "<sw>": 4,  # Swahili token
-            "<en>": 5,  # English token
-            "<mix>": 6,  # Code-switched segment
-        }
+        self.char_to_id = {}
+        self.id_to_char = {}
+        self._init_vocab()
+
+    def _init_vocab(self):
+        """Initialize character vocabulary"""
+        # Basic Latin alphabet (lowercase)
+        chars = list('abcdefghijklmnopqrstuvwxyz')
         
-    def train(self, texts: List[str], output_path: str):
-        """Train SentencePiece tokenizer on Swahili text"""
-        # Write texts to temporary file
-        with open("temp_train.txt", "w", encoding="utf-8") as f:
-            for text in texts:
-                f.write(text + "\n")
+        # Swahili specific characters
+        chars.extend(['á', 'é', 'í', 'ó', 'ú', 'â', 'ê', 'î', 'ô', 'û'])
         
-        # Train SentencePiece model
-        spm.SentencePieceTrainer.train(
-            input="temp_train.txt",
-            model_prefix=output_path,
-            vocab_size=self.vocab_size,
-            character_coverage=0.9995,
-            model_type="unigram",
-            pad_id=self.special_tokens["<pad>"],
-            unk_id=self.special_tokens["<unk>"],
-            bos_id=self.special_tokens["<s>"],
-            eos_id=self.special_tokens["</s>"],
-            user_defined_symbols=["<sw>", "<en>", "<mix>"]
-        )
+        # Numbers and punctuation
+        chars.extend(list('0123456789.,!?-\'\"()[] '))
         
-        # Load trained model
-        self.sp_model = spm.SentencePieceProcessor()
-        self.sp_model.load(f"{output_path}.model")
-    
-    def load(self, model_path: str):
-        """Load trained tokenizer"""
-        self.sp_model = spm.SentencePieceProcessor()
-        self.sp_model.load(model_path)
+        # Special tokens
+        special_tokens = ['<pad>', '<unk>', '<sos>', '<eos>']
+        
+        # Create vocabulary
+        for i, token in enumerate(special_tokens + chars):
+            self.char_to_id[token] = i
+            self.id_to_char[i] = token
+
+    def encode(self, text: str) -> List[int]:
+        """Convert text to token IDs"""
+        tokens = []
+        for char in text.lower():
+            token_id = self.char_to_id.get(char, self.char_to_id['<unk>'])
+            tokens.append(token_id)
+        return tokens
+
+    def decode(self, token_ids: List[int]) -> str:
+        """Convert token IDs to text"""
+        return ''.join(self.id_to_char.get(id, '<unk>') for id in token_ids)
 
 class TextPreprocessor:
-    """Text preprocessing for Kenyan Swahili TTS"""
-    def __init__(self, tokenizer: SwahiliTokenizer):
-        self.tokenizer = tokenizer
+    """Text preprocessing for Kenyan Swahili"""
+    def __init__(self, tokenizer: Optional[SwahiliTokenizer] = None):
+        self.tokenizer = tokenizer or SwahiliTokenizer()
+        self._init_normalizers()
+
+    def _init_normalizers(self):
+        """Initialize text normalization rules"""
+        # Number mapping
         self.number_map = {
-            "0": "sifuri",
-            "1": "moja",
-            "2": "mbili",
-            "3": "tatu",
-            "4": "nne",
-            "5": "tano",
-            "6": "sita",
-            "7": "saba",
-            "8": "nane",
-            "9": "tisa"
+            '0': 'sifuri', '1': 'moja', '2': 'mbili', '3': 'tatu',
+            '4': 'nne', '5': 'tano', '6': 'sita', '7': 'saba',
+            '8': 'nane', '9': 'tisa'
         }
         
-        # Common Kenyan Swahili expressions and their normalized forms
+        # Common Kenyan Swahili expressions and their standard forms
         self.expressions = {
-            # Greetings and responses
-            "sawa": "sawa",
-            "sawa sawa": "sawa",
-            "uko": "uko",
-            "uko sawa": "uko sawa",
-            "poa": "poa",
-            "poa poa": "poa",
-            "mambo": "mambo",
-            "mambo vipi": "mambo",
-            "niaje": "habari",
-            "vipi": "vipi",
-            "habari": "habari",
-            "habari yako": "habari",
-            "asante": "asante",
-            "asante sana": "asante",
-            "karibu": "karibu",
-            "pole": "pole",
-            "pole sana": "pole",
+            # Greetings
+            "sasa": "hujambo",
+            "mambo": "hujambo",
+            "niaje": "hujambo",
+            "vipi": "hujambo",
             
-            # Common phrases
-            "sasa": "habari",
-            "sasa hivi": "sasa",
-            "hapa": "hapa",
-            "pale": "pale",
-            "huko": "huko",
-            "kuja": "kuja",
-            "njoo": "njoo",
-            "tafadhali": "tafadhali",
-            "samahani": "samahani",
+            # Common expressions
+            "sawa sawa": "sawa",
+            "poa": "nzuri",
+            "fiti": "nzuri",
+            "shwari": "nzuri",
             
             # Time expressions
-            "leo": "leo",
-            "jana": "jana",
-            "kesho": "kesho",
-            "asubuhi": "asubuhi",
-            "mchana": "mchana",
-            "jioni": "jioni",
-            "usiku": "usiku",
+            "saa hizi": "sasa",
+            "saa ngapi": "saa gani",
             
-            # Common adjectives
-            "nzuri": "nzuri",
-            "mbaya": "mbaya",
-            "kubwa": "kubwa",
-            "ndogo": "ndogo",
-            "nyingi": "nyingi",
-            "kidogo": "kidogo",
-            
-            # Common verbs
-            "kwenda": "kwenda",
-            "kuja": "kuja",
-            "kusema": "kusema",
-            "kufanya": "kufanya",
-            "kuwa": "kuwa",
-            
-            # Kenyan Sheng expressions (with standard Swahili mappings)
-            "maze": "rafiki",
-            "fisi": "mtu",
-            "mangware": "jioni",
-            "rada": "poa",
-            "kushu": "sawa",
-            "matha": "mama",
-            "fatha": "baba",
-            "ndai": "gari",
-            
-            # Question words
-            "nini": "nini",
-            "wapi": "wapi",
-            "lini": "lini",
-            "nani": "nani",
-            
-            # Common contractions
-            "siji": "sijui",
-            "uko'je": "uko vipi",
-            "u'do": "uko",
-            
-            # Emphasis and interjections
-            "kabisa": "kabisa",
-            "sana": "sana",
-            "ati": "ati",
-            "eh": "eh",
-            "ehe": "ehe",
-            "ai": "ai",
-            
-            # Location-specific terms
-            "mashinani": "vijijini",
-            "mtaa": "mtaa",
-            "kijiji": "kijiji",
-            "shags": "nyumbani",
-            
-            # Extended Sheng expressions
-            # Greetings and responses
-            "niaje": "habari",
-            "sasa": "habari",
-            "poa": "nzuri",
-            "mos mos": "pole pole",
-            "rada": "nzuri",
-            "shida": "nzuri",
-            
-            # People and relationships
+            # Sheng expressions
             "maze": "rafiki",
             "manze": "rafiki",
             "bro": "ndugu",
-            "braza": "ndugu",
-            "mshikaji": "rafiki",
-            "msee": "mtu",
-            "matha": "mama",
-            "fatha": "baba",
-            "mbuyu": "rafiki",
-            "mboka": "rafiki",
-            "dem": "msichana",
-            "manzi": "msichana",
-            "mrembo": "msichana",
+            "demu": "msichana",
+            "dame": "msichana",
             "chali": "kijana",
-            
-            # Places and locations
-            "mtaa": "mtaa",
-            "shags": "nyumbani",
-            "keja": "nyumba",
-            "kwangu": "nyumbani",
-            "kwetu": "nyumbani",
-            "mashinani": "vijijini",
-            "ghetto": "mtaa",
-            
-            # Transportation
+            "fisi": "mtu",
+            "ngori": "pesa",
+            "doo": "pesa",
+            "mshiko": "pesa",
             "ndai": "gari",
             "nduthi": "pikipiki",
-            "mat": "matatu",
+            "mathree": "matatu",
             "nganya": "matatu",
             
-            # Money and business
-            "mshwari": "pesa",
-            "doo": "pesa",
-            "thao": "elfu",
-            "mbao": "ishirini",
-            "bob": "shilingi",
-            "mangwenje": "pesa",
+            # Informal words
+            "uko": "upo",
+            "zii": "hapana",
+            "sio": "siyo",
+            "yawa": "aisee",
             
-            # Time and events
-            "mangware": "jioni",
-            "usiku poa": "usiku mwema",
-            "kesha": "kukesha",
-            "ringo": "saa",
+            # Modern expressions
+            "kuconnect": "kuunganisha",
+            "kudiscuss": "kujadili",
+            "kupromote": "kukuza",
+            "kudownload": "kupakua",
+            "kusave": "kuhifadhi",
             
-            # Actions and states
-            "toa": "ondoka",
-            "enda": "ondoka",
-            "kula": "kula",
-            "lamba": "kula",
-            "nyonya": "kunywa",
-            "kata": "ondoka",
-            "zima": "lala",
+            # Social media
+            "dm": "ujumbe",
+            "status": "hali",
+            "profile": "wasifu",
             
-            # Qualities and descriptions
-            "poa": "nzuri",
-            "fiti": "nzuri",
-            "moto": "nzuri sana",
-            "fresh": "nzuri",
-            "sharp": "sawa",
-            "proper": "nzuri",
-            "kubwa": "kubwa",
-            "ndogo": "ndogo",
-            
-            # Common phrases
-            "uko na": "una",
-            "ni kubwa": "ni nzuri",
-            "ni poa": "ni nzuri",
-            "tukutane": "tukutane",
-            "tuonane": "tuonane",
-            "niko na": "nina",
-            
-            # Modern tech terms
-            "simu": "simu",
-            "foni": "simu",
-            "net": "mtandao",
+            # Technology
+            "simu": "rununu",
+            "kompyuta": "tarakilishi",
+            "internet": "mtandao",
             "wifi": "mtandao",
             
-            # Emotions and feelings
-            "najam": "najisikia",
-            "niko high": "nina furaha",
-            "niko low": "nina huzuni",
-            "nimechoka": "nimechoka",
+            # Business
+            "biashara": "biashara",
+            "bei": "gharama",
+            "ofa": "punguzo",
+            
+            # Transportation
+            "boda": "pikipiki",
+            "tuktuk": "bajaji",
             
             # Food and drinks
-            "kanyagi": "kahawa",
-            "chai": "chai",
-            "chipo": "viazi",
-            "nyama": "nyama",
+            "chai": "majani",
+            "soda": "kinywaji",
+            "juice": "sharubati",
             
-            # Emphasis and interjections
-            "kabisa": "kabisa",
-            "tu": "tu",
-            "sana": "sana",
-            "ati": "ati",
-            "kweli": "kweli"
+            # Locations
+            "town": "mjini",
+            "shags": "mashambani",
+            "mtaa": "mtaa",
+            
+            # Education
+            "shule": "skuli",
+            "masomo": "masomo",
+            "exam": "mtihani",
+            
+            # Entertainment
+            "movie": "filamu",
+            "show": "tamasha",
+            "game": "mchezo"
         }
-    
+
     def normalize_numbers(self, text: str) -> str:
-        """Convert numbers to Swahili words"""
+        """Convert numbers to words"""
         words = []
         for word in text.split():
             if word.isdigit():
-                # Convert each digit to Swahili
-                swahili_num = " ".join(self.number_map[d] for d in word)
-                words.append(swahili_num)
+                # Convert each digit to word
+                number_words = ' '.join(self.number_map[d] for d in word)
+                words.append(number_words)
             else:
                 words.append(word)
-        return " ".join(words)
-    
+        return ' '.join(words)
+
     def normalize_expressions(self, text: str) -> str:
-        """Normalize common Kenyan Swahili expressions"""
-        for expr, norm in self.expressions.items():
-            text = re.sub(rf"\b{expr}\b", norm, text, flags=re.IGNORECASE)
-        return text
-    
-    def detect_languages(self, text: str) -> List[Tuple[str, str]]:
-        """
-        Detect language segments in text
-        Returns list of (text_segment, language) tuples
-        """
-        try:
-            detector = Detector(text)
-            # If confidence is low, treat as code-switched
-            if detector.language.confidence < 0.8:
-                return [(text, "mix")]
+        """Normalize common expressions"""
+        words = text.split()
+        normalized = []
+        i = 0
+        while i < len(words):
+            # Check for two-word expressions
+            if i < len(words) - 1:
+                two_words = ' '.join(words[i:i+2])
+                if two_words in self.expressions:
+                    normalized.append(self.expressions[two_words])
+                    i += 2
+                    continue
             
-            # Use polyglot's word-level language detection
-            segments = []
-            current_lang = None
-            current_segment = []
+            # Check single word
+            if words[i] in self.expressions:
+                normalized.append(self.expressions[words[i]])
+            else:
+                normalized.append(words[i])
+            i += 1
             
-            for word in detector.words:
-                lang = "sw" if word.language.code == "sw" else "en"
-                if current_lang is None:
-                    current_lang = lang
-                    current_segment = [word.token]
-                elif lang == current_lang:
-                    current_segment.append(word.token)
-                else:
-                    segments.append((" ".join(current_segment), current_lang))
-                    current_lang = lang
-                    current_segment = [word.token]
-            
-            if current_segment:
-                segments.append((" ".join(current_segment), current_lang))
-            
-            return segments
-        except:
-            # Fallback: treat as single Swahili segment
-            return [(text, "sw")]
-    
+        return ' '.join(normalized)
+
+    def clean_text(self, text: str) -> str:
+        """Basic text cleaning"""
+        # Convert to lowercase
+        text = text.lower()
+        
+        # Replace multiple spaces with single space
+        text = re.sub(r'\s+', ' ', text)
+        
+        # Remove special characters except basic punctuation
+        text = re.sub(r'[^a-z0-9\s.,!?\'\"()-]', '', text)
+        
+        return text.strip()
+
     def process_text(self, text: str) -> TextTokens:
         """
-        Process text for TTS
+        Process input text
         Args:
-            text: Input text (Swahili or mixed Swahili-English)
+            text: Input text
         Returns:
-            TextTokens object with token IDs and language tags
+            TextTokens object containing token IDs and processed text
         """
-        # Basic normalization
-        text = text.lower().strip()
+        # Clean text
+        text = self.clean_text(text)
+        
+        # Normalize numbers
         text = self.normalize_numbers(text)
+        
+        # Normalize expressions
         text = self.normalize_expressions(text)
         
-        # Detect language segments
-        segments = self.detect_languages(text)
+        # Tokenize
+        token_ids = self.tokenizer.encode(text)
         
-        # Tokenize with language tags
-        all_tokens = []
-        languages = []
-        
-        for segment, lang in segments:
-            # Add language start token
-            lang_token = "<sw>" if lang == "sw" else "<en>" if lang == "en" else "<mix>"
-            all_tokens.extend(self.tokenizer.sp_model.encode(lang_token))
-            languages.extend([lang] * len(self.tokenizer.sp_model.encode(lang_token)))
-            
-            # Tokenize segment
-            tokens = self.tokenizer.sp_model.encode(segment)
-            all_tokens.extend(tokens)
-            languages.extend([lang] * len(tokens))
-        
-        # Convert to tensor
-        token_ids = torch.tensor(all_tokens, dtype=torch.long).unsqueeze(0)
-        attention_mask = torch.ones_like(token_ids)
-        
-        return TextTokens(
-            token_ids=token_ids,
-            languages=languages,
-            attention_mask=attention_mask
-        )
+        return TextTokens(token_ids=token_ids, text=text)
 
 class AudioPreprocessor:
     def __init__(self, sample_rate=22050):
