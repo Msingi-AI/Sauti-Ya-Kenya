@@ -1,277 +1,305 @@
 """
 Training script for Kenyan Swahili TTS model
 """
-import argparse
-import json
-import logging
-import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
-from tqdm import tqdm
+from pathlib import Path
+import json
 import numpy as np
+from tqdm import tqdm
+import wandb
 from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
 
-from .model import KenyanSwahiliTTS
-from .vocoder import HiFiGAN
-from .preprocessor import TextPreprocessor, SwahiliTokenizer
-from .config import ModelConfig
+from src.model import KenyanSwahiliTTS
+from src.vocoder import HiFiGAN
+from src.evaluation import TTSEvaluator
+
+@dataclass
+class TrainingConfig:
+    """Training configuration"""
+    # Data paths
+    train_dir: str = "processed_data/train"
+    val_dir: str = "processed_data/val"
+    checkpoint_dir: str = "checkpoints"
+    
+    # Model parameters
+    hidden_size: int = 384
+    n_heads: int = 4
+    n_layers: int = 6
+    vocab_size: int = 8000
+    n_mel_channels: int = 80
+    
+    # Training parameters
+    batch_size: int = 16
+    learning_rate: float = 0.001
+    max_epochs: int = 1000
+    warmup_steps: int = 4000
+    grad_clip_thresh: float = 1.0
+    
+    # Validation
+    val_interval: int = 1000
+    checkpoint_interval: int = 5000
+    
+    # Device
+    device: str = "cuda" if torch.cuda.is_available() else "cpu"
 
 class SwahiliTTSDataset(Dataset):
-    """Dataset for Swahili TTS training"""
-    def __init__(self, data_dir: str, tokenizer: SwahiliTokenizer):
-        self.data_dir = data_dir
-        self.tokenizer = tokenizer
-        self.preprocessor = TextPreprocessor(tokenizer)
-        self.metadata = self.load_metadata()
+    """Dataset for TTS training"""
+    def __init__(self, data_dir: str):
+        self.data_dir = Path(data_dir)
+        self.examples = []
+        self._load_examples()
         
-    def load_metadata(self) -> List[Dict]:
-        """Load all metadata files"""
-        metadata = []
-        metadata_dir = os.path.join(self.data_dir, "metadata")
-        for file in os.listdir(metadata_dir):
-            if file.endswith(".json"):
-                with open(os.path.join(metadata_dir, file), "r") as f:
-                    metadata.append(json.load(f))
-        return metadata
-    
+    def _load_examples(self):
+        """Load all examples from data directory"""
+        for example_dir in self.data_dir.iterdir():
+            if example_dir.is_dir():
+                self.examples.append(example_dir)
+                
     def __len__(self) -> int:
-        return len(self.metadata)
-    
-    def __getitem__(self, idx: int) -> Dict:
-        """Get a training sample"""
-        item = self.metadata[idx]
+        return len(self.examples)
         
-        # Load audio
-        audio_path = os.path.join(self.data_dir, "wavs", item["audio_file"])
-        audio, _ = load_audio(audio_path)
+    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
+        example_dir = self.examples[idx]
         
-        # Process text
-        text_tokens = self.preprocessor.process_text(item["text"])
+        # Load tensors
+        audio = torch.load(example_dir / "audio.pt")
+        mel = torch.load(example_dir / "mel.pt")
+        tokens = torch.load(example_dir / "tokens.pt")
         
+        # Load metadata
+        with open(example_dir / "metadata.json", "r") as f:
+            metadata = json.load(f)
+            
         return {
-            "text_ids": text_tokens.token_ids,
             "audio": audio,
-            "speaker_id": item["speaker_id"],
-            "text": item["text"]
+            "mel": mel,
+            "tokens": torch.tensor(tokens),
+            "speaker_id": metadata["speaker_id"],
+            "text": metadata["text"]
         }
-
-def load_audio(file_path: str) -> Tuple[torch.Tensor, int]:
-    """Load and preprocess audio file"""
-    audio, sr = torchaudio.load(file_path)
-    return audio, sr
 
 class Trainer:
     """TTS model trainer"""
-    def __init__(self,
-                 config: ModelConfig,
-                 train_dir: str,
-                 val_dir: Optional[str] = None,
-                 checkpoint_dir: str = "checkpoints",
-                 device: str = "cuda" if torch.cuda.is_available() else "cpu"):
+    def __init__(self, config: TrainingConfig):
         self.config = config
-        self.device = device
-        self.checkpoint_dir = checkpoint_dir
-        os.makedirs(checkpoint_dir, exist_ok=True)
+        self.setup_wandb()
+        self.setup_data()
+        self.setup_model()
+        self.setup_training()
+        self.evaluator = TTSEvaluator()
         
-        # Initialize models
-        self.tts_model = KenyanSwahiliTTS(config).to(device)
-        self.vocoder = HiFiGAN(config).to(device)
+    def setup_wandb(self):
+        """Initialize Weights & Biases logging"""
+        wandb.init(
+            project="kenyan-swahili-tts",
+            config=self.config.__dict__
+        )
         
-        # Initialize tokenizer
-        self.tokenizer = SwahiliTokenizer(vocab_size=config.vocab_size)
-        
+    def setup_data(self):
+        """Setup data loaders"""
         # Create datasets
-        self.train_dataset = SwahiliTTSDataset(train_dir, self.tokenizer)
-        self.val_dataset = SwahiliTTSDataset(val_dir, self.tokenizer) if val_dir else None
+        train_dataset = SwahiliTTSDataset(self.config.train_dir)
+        val_dataset = SwahiliTTSDataset(self.config.val_dir)
         
-        # Create dataloaders
+        # Create data loaders
         self.train_loader = DataLoader(
-            self.train_dataset,
-            batch_size=config.batch_size,
+            train_dataset,
+            batch_size=self.config.batch_size,
             shuffle=True,
             num_workers=4,
-            collate_fn=self.collate_fn
+            pin_memory=True
         )
         
-        if self.val_dataset:
-            self.val_loader = DataLoader(
-                self.val_dataset,
-                batch_size=config.batch_size,
-                shuffle=False,
-                num_workers=4,
-                collate_fn=self.collate_fn
-            )
-        
-        # Initialize optimizers
-        self.tts_optimizer = optim.Adam(
-            self.tts_model.parameters(),
-            lr=config.learning_rate
-        )
-        self.vocoder_optimizer = optim.Adam(
-            self.vocoder.parameters(),
-            lr=config.learning_rate
+        self.val_loader = DataLoader(
+            val_dataset,
+            batch_size=self.config.batch_size,
+            shuffle=False,
+            num_workers=4,
+            pin_memory=True
         )
         
-        # Initialize losses
-        self.mel_loss = nn.L1Loss()
-        self.duration_loss = nn.MSELoss()
+    def setup_model(self):
+        """Setup model, vocoder, and move to device"""
+        # Create model
+        self.model = KenyanSwahiliTTS(self.config)
+        self.model.to(self.config.device)
         
-    def collate_fn(self, batch: List[Dict]) -> Dict:
-        """Collate batch samples"""
-        text_ids = [item["text_ids"] for item in batch]
-        audio = [item["audio"] for item in batch]
+        # Create vocoder
+        self.vocoder = HiFiGAN()
+        self.vocoder.to(self.config.device)
         
-        # Pad sequences
-        text_ids = pad_sequence(text_ids, batch_first=True)
-        audio = pad_sequence(audio, batch_first=True)
+    def setup_training(self):
+        """Setup optimizer and scheduler"""
+        self.optimizer = optim.AdamW(
+            self.model.parameters(),
+            lr=self.config.learning_rate,
+            betas=(0.9, 0.98),
+            eps=1e-9
+        )
         
-        return {
-            "text_ids": text_ids,
-            "audio": audio
-        }
+        # Learning rate scheduler with warmup
+        self.scheduler = optim.lr_scheduler.OneCycleLR(
+            self.optimizer,
+            max_lr=self.config.learning_rate,
+            epochs=self.config.max_epochs,
+            steps_per_epoch=len(self.train_loader),
+            pct_start=0.1
+        )
         
-    def train_step(self, batch: Dict) -> Dict:
-        """Single training step"""
-        text_ids = batch["text_ids"].to(self.device)
-        audio = batch["audio"].to(self.device)
-        
-        # Forward pass
-        mel_output, duration_pred = self.tts_model(text_ids)
-        audio_pred = self.vocoder(mel_output)
-        
-        # Calculate losses
-        mel_loss = self.mel_loss(mel_output, audio)
-        duration_loss = self.duration_loss(duration_pred, audio.size(1))
-        total_loss = mel_loss + duration_loss
-        
-        # Backward pass
-        self.tts_optimizer.zero_grad()
-        self.vocoder_optimizer.zero_grad()
-        total_loss.backward()
-        self.tts_optimizer.step()
-        self.vocoder_optimizer.step()
-        
-        return {
-            "mel_loss": mel_loss.item(),
-            "duration_loss": duration_loss.item(),
-            "total_loss": total_loss.item()
-        }
-        
-    def validate(self) -> Dict:
-        """Validate model"""
-        if not self.val_loader:
-            return {}
-            
-        self.tts_model.eval()
-        self.vocoder.eval()
-        
-        val_losses = []
-        with torch.no_grad():
-            for batch in self.val_loader:
-                losses = self.train_step(batch)
-                val_losses.append(losses)
-                
-        # Average losses
-        avg_losses = {}
-        for key in val_losses[0].keys():
-            avg_losses[key] = sum(l[key] for l in val_losses) / len(val_losses)
-            
-        self.tts_model.train()
-        self.vocoder.train()
-        return avg_losses
-        
-    def save_checkpoint(self, epoch: int, losses: Dict):
+    def save_checkpoint(self, step: int):
         """Save model checkpoint"""
-        checkpoint = {
-            "epoch": epoch,
-            "tts_model": self.tts_model.state_dict(),
-            "vocoder": self.vocoder.state_dict(),
-            "tts_optimizer": self.tts_optimizer.state_dict(),
-            "vocoder_optimizer": self.vocoder_optimizer.state_dict(),
-            "losses": losses
-        }
+        checkpoint_path = Path(self.config.checkpoint_dir) / f"model_step_{step}.pt"
+        checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
         
-        path = os.path.join(self.checkpoint_dir, f"checkpoint_epoch_{epoch}.pt")
-        torch.save(checkpoint, path)
+        torch.save({
+            "step": step,
+            "model_state_dict": self.model.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "scheduler_state_dict": self.scheduler.state_dict()
+        }, checkpoint_path)
         
     def load_checkpoint(self, checkpoint_path: str):
         """Load model checkpoint"""
-        checkpoint = torch.load(checkpoint_path, map_location=self.device)
+        checkpoint = torch.load(checkpoint_path)
+        self.model.load_state_dict(checkpoint["model_state_dict"])
+        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+        return checkpoint["step"]
         
-        self.tts_model.load_state_dict(checkpoint["tts_model"])
-        self.vocoder.load_state_dict(checkpoint["vocoder"])
-        self.tts_optimizer.load_state_dict(checkpoint["tts_optimizer"])
-        self.vocoder_optimizer.load_state_dict(checkpoint["vocoder_optimizer"])
+    def train_step(self, batch: Dict[str, torch.Tensor]) -> Dict[str, float]:
+        """Single training step"""
+        # Move batch to device
+        tokens = batch["tokens"].to(self.config.device)
+        mel_target = batch["mel"].to(self.config.device)
         
-        return checkpoint["epoch"]
+        # Forward pass
+        mel_output, durations = self.model(tokens)
         
-    def train(self, num_epochs: int, validate_every: int = 1):
+        # Generate audio
+        audio_output = self.vocoder(mel_output)
+        
+        # Compute losses
+        mel_loss = nn.MSELoss()(mel_output, mel_target)
+        duration_loss = nn.MSELoss()(durations, torch.ones_like(durations))  # Placeholder
+        
+        # Total loss
+        loss = mel_loss + duration_loss
+        
+        # Backward pass
+        self.optimizer.zero_grad()
+        loss.backward()
+        
+        # Gradient clipping
+        torch.nn.utils.clip_grad_norm_(
+            self.model.parameters(),
+            self.config.grad_clip_thresh
+        )
+        
+        # Update weights
+        self.optimizer.step()
+        self.scheduler.step()
+        
+        return {
+            "loss": loss.item(),
+            "mel_loss": mel_loss.item(),
+            "duration_loss": duration_loss.item()
+        }
+        
+    @torch.no_grad()
+    def validate(self) -> Dict[str, float]:
+        """Run validation"""
+        self.model.eval()
+        val_losses = []
+        
+        for batch in self.val_loader:
+            # Move batch to device
+            tokens = batch["tokens"].to(self.config.device)
+            mel_target = batch["mel"].to(self.config.device)
+            audio_target = batch["audio"].to(self.config.device)
+            
+            # Forward pass
+            mel_output, durations = self.model(tokens)
+            audio_output = self.vocoder(mel_output)
+            
+            # Compute metrics
+            metrics = self.evaluator.evaluate_batch(
+                audio_output,
+                audio_target,
+                mel_output,
+                mel_target,
+                durations,
+                torch.ones_like(durations)  # Placeholder
+            )
+            
+            val_losses.append(metrics)
+            
+        # Average metrics
+        avg_metrics = {}
+        for key in val_losses[0].keys():
+            avg_metrics[key] = np.mean([l[key] for l in val_losses])
+            
+        self.model.train()
+        return avg_metrics
+        
+    def train(self, resume_from: Optional[str] = None):
         """Train the model"""
-        for epoch in range(num_epochs):
-            # Training
-            train_losses = []
-            progress_bar = tqdm(self.train_loader, desc=f"Epoch {epoch+1}/{num_epochs}")
+        # Resume from checkpoint if specified
+        start_step = 0
+        if resume_from:
+            start_step = self.load_checkpoint(resume_from)
             
-            for batch in progress_bar:
-                losses = self.train_step(batch)
-                train_losses.append(losses)
-                
-                # Update progress bar
-                avg_loss = sum(l["total_loss"] for l in train_losses) / len(train_losses)
-                progress_bar.set_postfix(loss=f"{avg_loss:.4f}")
-            
-            # Validation
-            if (epoch + 1) % validate_every == 0:
-                val_losses = self.validate()
-                
-                # Log losses
-                logging.info(f"Epoch {epoch+1}/{num_epochs}")
-                logging.info(f"Train Loss: {avg_loss:.4f}")
-                if val_losses:
-                    logging.info(f"Val Loss: {val_losses['total_loss']:.4f}")
+        # Training loop
+        step = start_step
+        self.model.train()
+        
+        with tqdm(total=self.config.max_epochs * len(self.train_loader)) as pbar:
+            for epoch in range(self.config.max_epochs):
+                for batch in self.train_loader:
+                    # Training step
+                    losses = self.train_step(batch)
                     
-                # Save checkpoint
-                self.save_checkpoint(epoch + 1, {
-                    "train": train_losses[-1],
-                    "val": val_losses
-                })
+                    # Update progress bar
+                    pbar.update(1)
+                    pbar.set_postfix(loss=f"{losses['loss']:.4f}")
+                    
+                    # Log metrics
+                    wandb.log({
+                        "train/loss": losses["loss"],
+                        "train/mel_loss": losses["mel_loss"],
+                        "train/duration_loss": losses["duration_loss"],
+                        "train/learning_rate": self.scheduler.get_last_lr()[0]
+                    }, step=step)
+                    
+                    # Validation
+                    if step > 0 and step % self.config.val_interval == 0:
+                        val_metrics = self.validate()
+                        wandb.log({
+                            f"val/{k}": v for k, v in val_metrics.items()
+                        }, step=step)
+                        
+                    # Save checkpoint
+                    if step > 0 and step % self.config.checkpoint_interval == 0:
+                        self.save_checkpoint(step)
+                        
+                    step += 1
+                    
+        # Save final checkpoint
+        self.save_checkpoint(step)
+        wandb.finish()
 
 def main():
-    parser = argparse.ArgumentParser(description="Train Kenyan Swahili TTS model")
-    parser.add_argument("--train-dir", type=str, required=True,
-                       help="Training data directory")
-    parser.add_argument("--val-dir", type=str,
-                       help="Validation data directory")
-    parser.add_argument("--checkpoint-dir", type=str, default="checkpoints",
-                       help="Directory to save checkpoints")
-    parser.add_argument("--resume", type=str,
-                       help="Resume training from checkpoint")
-    parser.add_argument("--epochs", type=int, default=100,
-                       help="Number of training epochs")
-    args = parser.parse_args()
+    # Create config
+    config = TrainingConfig()
     
-    # Set up logging
-    logging.basicConfig(level=logging.INFO)
+    # Create trainer
+    trainer = Trainer(config)
     
-    # Initialize trainer
-    config = ModelConfig()
-    trainer = Trainer(
-        config=config,
-        train_dir=args.train_dir,
-        val_dir=args.val_dir,
-        checkpoint_dir=args.checkpoint_dir
-    )
-    
-    # Resume from checkpoint if specified
-    start_epoch = 0
-    if args.resume:
-        start_epoch = trainer.load_checkpoint(args.resume)
-        logging.info(f"Resuming from epoch {start_epoch}")
-    
-    # Train model
-    trainer.train(args.epochs - start_epoch)
+    # Start training
+    trainer.train()
 
 if __name__ == "__main__":
     main()
