@@ -1,167 +1,118 @@
 """
-Data preprocessing for TTS training
+Preprocess raw audio data for TTS training
 """
+import os
 import json
 import torch
 import torchaudio
 import numpy as np
 from pathlib import Path
-from typing import Dict, List, Tuple
-import random
+from typing import Dict, List, Optional
 from tqdm import tqdm
-import librosa
-from src.preprocessor import TextPreprocessor
+
+from .preprocessor import TextPreprocessor, SwahiliTokenizer
+
+class AudioPreprocessor:
+    def __init__(self, 
+                 sample_rate: int = 22050,
+                 n_fft: int = 1024,
+                 hop_length: int = 256,
+                 win_length: int = 1024,
+                 n_mels: int = 80):
+        self.sample_rate = sample_rate
+        self.n_fft = n_fft
+        self.hop_length = hop_length
+        self.win_length = win_length
+        self.n_mels = n_mels
+        
+        self.mel_transform = torchaudio.transforms.MelSpectrogram(
+            sample_rate=sample_rate,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            win_length=win_length,
+            n_mels=n_mels,
+            center=True,
+            pad_mode="reflect",
+            power=1.0,
+            norm="slaney",
+            mel_scale="slaney"
+        )
+
+    def load_audio(self, file_path: str) -> torch.Tensor:
+        """Load and resample audio file"""
+        waveform, sr = torchaudio.load(file_path)
+        if sr != self.sample_rate:
+            waveform = torchaudio.functional.resample(waveform, sr, self.sample_rate)
+        return waveform
+
+    def get_mel_spectrogram(self, waveform: torch.Tensor) -> torch.Tensor:
+        """Convert waveform to mel spectrogram"""
+        mel = self.mel_transform(waveform)
+        mel = torch.log(torch.clamp(mel, min=1e-5))
+        return mel.squeeze(0).T  # (time, n_mels)
+
+    def normalize_audio(self, waveform: torch.Tensor) -> torch.Tensor:
+        """Normalize audio to [-1, 1] range"""
+        return waveform / (torch.max(torch.abs(waveform)) + 1e-8)
+
+    def process_audio(self, file_path: str) -> Dict[str, torch.Tensor]:
+        """Process audio file to get mel spectrogram and duration"""
+        # Load and normalize audio
+        waveform = self.load_audio(file_path)
+        waveform = self.normalize_audio(waveform)
+        
+        # Get mel spectrogram
+        mel = self.get_mel_spectrogram(waveform)
+        
+        # Estimate duration (frames per character)
+        duration = torch.ones(mel.size(0), dtype=torch.long)
+        
+        return {
+            'waveform': waveform,
+            'mel': mel,
+            'duration': duration
+        }
 
 class DataPreprocessor:
     def __init__(self,
-                 data_dir: str = "data",
-                 output_dir: str = "processed_data",
-                 sample_rate: int = 22050,
-                 n_mel_channels: int = 80,
-                 mel_fmin: float = 0.0,
-                 mel_fmax: float = 8000.0,
-                 train_split: float = 0.9):
-        """
-        Initialize data preprocessor
-        Args:
-            data_dir: Directory containing recordings and metadata
-            output_dir: Directory to save processed data
-            sample_rate: Target sample rate
-            n_mel_channels: Number of mel channels
-            mel_fmin: Minimum mel frequency
-            mel_fmax: Maximum mel frequency
-            train_split: Fraction of data to use for training
-        """
+                 data_dir: str,
+                 output_dir: str,
+                 val_size: float = 0.1):
         self.data_dir = Path(data_dir)
         self.output_dir = Path(output_dir)
-        self.sample_rate = sample_rate
-        self.n_mel_channels = n_mel_channels
-        self.mel_fmin = mel_fmin
-        self.mel_fmax = mel_fmax
-        self.train_split = train_split
+        self.val_size = val_size
         
         # Create output directories
-        self.train_dir = self.output_dir / "train"
-        self.val_dir = self.output_dir / "val"
-        self.create_directories()
-        
-        # Initialize mel spectrogram transform
-        self.mel_transform = torchaudio.transforms.MelSpectrogram(
-            sample_rate=sample_rate,
-            n_mels=n_mel_channels,
-            f_min=mel_fmin,
-            f_max=mel_fmax
-        )
-        
-        # Initialize text preprocessor
-        self.text_processor = TextPreprocessor()
-        
-    def create_directories(self):
-        """Create necessary directories"""
+        self.train_dir = self.output_dir / 'train'
+        self.val_dir = self.output_dir / 'val'
         self.train_dir.mkdir(parents=True, exist_ok=True)
         self.val_dir.mkdir(parents=True, exist_ok=True)
         
-    def load_metadata(self) -> Dict:
-        """Load recording metadata"""
-        metadata_file = self.data_dir / "metadata.json"
-        with open(metadata_file, "r") as f:
-            return json.load(f)
-            
-    def process_audio(self, audio_path: Path) -> torch.Tensor:
-        """
-        Process audio file
-        Args:
-            audio_path: Path to audio file
-        Returns:
-            Processed audio tensor
-        """
-        # Load audio
-        audio, sr = torchaudio.load(audio_path)
+        # Initialize processors
+        self.audio_processor = AudioPreprocessor()
+        self.tokenizer = SwahiliTokenizer()
+        self.text_processor = TextPreprocessor(self.tokenizer)
+
+    def load_metadata(self) -> Dict[str, Dict]:
+        """Load metadata from all recording sessions"""
+        metadata = {}
+        for session_dir in self.data_dir.glob('**/metadata.json'):
+            with open(session_dir, 'r', encoding='utf-8') as f:
+                session_meta = json.load(f)
+                metadata[session_dir.parent.name] = session_meta
+        return metadata
+
+    def split_data(self, metadata: Dict[str, Dict]) -> tuple[List[str], List[str]]:
+        """Split data into train and validation sets"""
+        all_files = list(metadata.keys())
+        np.random.shuffle(all_files)
         
-        # Convert to mono if stereo
-        if audio.size(0) > 1:
-            audio = torch.mean(audio, dim=0, keepdim=True)
-            
-        # Resample if necessary
-        if sr != self.sample_rate:
-            resampler = torchaudio.transforms.Resample(sr, self.sample_rate)
-            audio = resampler(audio)
-            
-        # Normalize
-        audio = audio / torch.abs(audio).max()
-        
-        return audio
-        
-    def compute_mel_spectrogram(self, audio: torch.Tensor) -> torch.Tensor:
-        """
-        Compute mel spectrogram
-        Args:
-            audio: Audio tensor
-        Returns:
-            Mel spectrogram tensor
-        """
-        # Add small offset to avoid log(0)
-        mel = self.mel_transform(audio)
-        mel = torch.log(torch.clamp(mel, min=1e-5))
-        return mel
-        
-    def process_text(self, text: str) -> torch.Tensor:
-        """
-        Process text
-        Args:
-            text: Input text
-        Returns:
-            Token IDs tensor
-        """
-        tokens = self.text_processor.process_text(text)
-        return torch.tensor(tokens.token_ids)
-        
-    def split_data(self, metadata: Dict) -> Tuple[List[str], List[str]]:
-        """
-        Split data into train and validation sets
-        Args:
-            metadata: Recording metadata
-        Returns:
-            Train and validation file lists
-        """
-        files = list(metadata.keys())
-        random.shuffle(files)
-        
-        split_idx = int(len(files) * self.train_split)
-        train_files = files[:split_idx]
-        val_files = files[split_idx:]
+        val_size = int(len(all_files) * self.val_size)
+        train_files = all_files[val_size:]
+        val_files = all_files[:val_size]
         
         return train_files, val_files
-        
-    def save_example(self,
-                    audio: torch.Tensor,
-                    mel: torch.Tensor,
-                    tokens: torch.Tensor,
-                    metadata: Dict,
-                    filename: str,
-                    output_dir: Path):
-        """
-        Save processed example
-        Args:
-            audio: Audio tensor
-            mel: Mel spectrogram tensor
-            tokens: Token IDs tensor
-            metadata: Example metadata
-            filename: Original filename
-            output_dir: Output directory
-        """
-        example_dir = output_dir / filename.replace(".wav", "")
-        example_dir.mkdir(exist_ok=True)
-        
-        # Save tensors
-        torch.save(audio, example_dir / "audio.pt")
-        torch.save(mel, example_dir / "mel.pt")
-        torch.save(tokens, example_dir / "tokens.pt")
-        
-        # Save metadata
-        with open(example_dir / "metadata.json", "w") as f:
-            json.dump(metadata, f, indent=2)
-            
+
     def process_dataset(self):
         """Process entire dataset"""
         print("Loading metadata...")
@@ -177,34 +128,39 @@ class DataPreprocessor:
         print(f"Processing {len(val_files)} validation examples...")
         for filename in tqdm(val_files):
             self.process_example(filename, metadata[filename], self.val_dir)
-            
-    def process_example(self,
-                       filename: str,
-                       metadata: Dict,
-                       output_dir: Path):
-        """
-        Process single example
-        Args:
-            filename: Audio filename
-            metadata: Example metadata
-            output_dir: Output directory
-        """
-        # Process audio
-        audio_path = self.data_dir / "recordings" / filename
-        audio = self.process_audio(audio_path)
+
+    def process_example(self, filename: str, metadata: Dict, output_dir: Path):
+        """Process a single example"""
+        # Create output directory
+        example_dir = output_dir / filename
+        example_dir.mkdir(parents=True, exist_ok=True)
         
-        # Compute mel spectrogram
-        mel = self.compute_mel_spectrogram(audio)
+        # Process audio
+        audio_path = str(self.data_dir / filename / 'audio.wav')
+        processed_audio = self.audio_processor.process_audio(audio_path)
         
         # Process text
-        tokens = self.process_text(metadata["text"])
+        tokens = self.text_processor.process_text(metadata["text"])
         
-        # Save processed example
-        self.save_example(audio, mel, tokens, metadata, filename, output_dir)
+        # Save processed data
+        torch.save(processed_audio['mel'], example_dir / 'mel.pt')
+        torch.save(processed_audio['waveform'], example_dir / 'waveform.pt')
+        torch.save(processed_audio['duration'], example_dir / 'duration.pt')
+        
+        # Save metadata
+        with open(example_dir / 'metadata.json', 'w', encoding='utf-8') as f:
+            json.dump({
+                'text': metadata['text'],
+                'processed_text': tokens.text,
+                'speaker_id': metadata.get('speaker_id', 'unknown')
+            }, f, ensure_ascii=False, indent=2)
 
 def main():
-    preprocessor = DataPreprocessor()
+    preprocessor = DataPreprocessor(
+        data_dir='recordings',
+        output_dir='processed_data'
+    )
     preprocessor.process_dataset()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
