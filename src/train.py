@@ -122,20 +122,28 @@ class Trainer:
         self.model.train()
         total_loss = 0
         
+        print("Starting training epoch...")
         with tqdm(self.train_loader, desc='Training') as pbar:
-            for batch in pbar:
+            print("Iterating over batches...")
+            for batch_idx, batch in enumerate(pbar):
+                print(f"Processing batch {batch_idx}...")
                 # Move batch to device
                 text = batch['text'].to(self.device)
                 mel = batch['mel'].to(self.device)
                 duration = batch['duration'].to(self.device)
                 
+                print("Shapes:", text.shape, mel.shape, duration.shape)
+                
                 # Forward pass
+                print("Forward pass...")
                 mel_output, duration_pred = self.model(text, duration_target=duration)
                 
                 # Calculate loss
+                print("Calculating loss...")
                 loss, metrics = self.loss_fn(mel_output, duration_pred, mel, duration)
                 
                 # Backward pass
+                print("Backward pass...")
                 self.optimizer.zero_grad()
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
