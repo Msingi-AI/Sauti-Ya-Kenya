@@ -117,10 +117,21 @@ python -m src.train
 
 ### Training on Google Colab
 
-1. Open `colab_train.ipynb` in Google Colab
-2. Mount your Google Drive
-3. Upload your data.zip file when prompted
-4. Training will automatically use GPU and save checkpoints
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Msingi-AI/Sauti-Ya-Kenya/blob/main/notebooks/colab_train.ipynb)
+
+Click the badge above to open the training notebook in Google Colab. The notebook will:
+1. Mount your Google Drive for persistent storage
+2. Clone the repository
+3. Install dependencies
+4. Upload and extract your data
+5. Train the model with GPU acceleration
+6. Save checkpoints to your Drive
+
+This allows you to:
+- Train on free GPU resources
+- Continue training across sessions
+- Keep your data and checkpoints safe in Drive
+- Make code changes locally while training in Colab
 
 ### Resuming Training
 
@@ -215,6 +226,8 @@ For more examples and detailed API documentation, see our [API Reference](docs/a
 Sauti-Ya-Kenya/
 ├── data/                  # Raw audio recordings and metadata
 ├── processed_data/        # Preprocessed training data
+├── notebooks/            # Jupyter notebooks
+│   └── colab_train.ipynb # Colab training notebook
 ├── src/
 │   ├── data_collection.py # GUI tool for recording
 │   ├── preprocess_data.py # Data preprocessing pipeline
