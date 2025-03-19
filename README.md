@@ -117,21 +117,29 @@ python -m src.train
 
 ### Training on Google Colab
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Msingi-AI/Sauti-Ya-Kenya/blob/main/notebooks/colab_train.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Msingi-AI/Sauti-Ya-Kenya/blob/main/notebooks/train_on_colab.ipynb)
 
 Click the badge above to open the training notebook in Google Colab. The notebook will:
 1. Mount your Google Drive for persistent storage
-2. Clone the repository
-3. Install dependencies
-4. Upload and extract your data
-5. Train the model with GPU acceleration
-6. Save checkpoints to your Drive
+2. Set up a clean environment (removing any stale symlinks)
+3. Clone the latest code
+4. Install dependencies
+5. Upload and extract your data (if needed)
+6. Find existing checkpoints (if any)
+7. Train the model with GPU acceleration
+8. Save checkpoints to your Drive
 
 This allows you to:
 - Train on free GPU resources
 - Continue training across sessions
 - Keep your data and checkpoints safe in Drive
 - Make code changes locally while training in Colab
+
+The notebook includes verification steps to ensure:
+- GPU is properly configured
+- Data is correctly loaded
+- Checkpoints are properly managed
+- Directory structure is clean
 
 ### Resuming Training
 
@@ -227,7 +235,7 @@ Sauti-Ya-Kenya/
 ├── data/                  # Raw audio recordings and metadata
 ├── processed_data/        # Preprocessed training data
 ├── notebooks/            # Jupyter notebooks
-│   └── colab_train.ipynb # Colab training notebook
+│   └── train_on_colab.ipynb # Colab training notebook
 ├── src/
 │   ├── data_collection.py # GUI tool for recording
 │   ├── preprocess_data.py # Data preprocessing pipeline
@@ -235,6 +243,8 @@ Sauti-Ya-Kenya/
 │   ├── train.py          # Training script
 │   └── api.py            # Inference API
 ├── checkpoints/          # Model checkpoints
+├── CONTRIBUTING.md       # Contribution guidelines
+├── CODE_OF_CONDUCT.md    # Community code of conduct
 └── requirements.txt      # Project dependencies
 ```
 
