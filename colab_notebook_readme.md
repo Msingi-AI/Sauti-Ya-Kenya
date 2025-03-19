@@ -1,7 +1,7 @@
 # Sauti Ya Kenya - Colab Training
 
 Click here to open in Colab:
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Msingi-AI/Sauti-Ya-Kenya/blob/main/colab_train.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Msingi-AI/Sauti-Ya-Kenya/blob/main/sauti_ya_kenya_training.ipynb)
 
 This notebook provides GPU-accelerated training for the Sauti Ya Kenya TTS model. It will:
 1. Mount your Google Drive for persistent storage
