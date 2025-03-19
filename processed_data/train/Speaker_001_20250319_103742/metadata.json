@@ -1,10 +1,5 @@
 {
-  "speaker_id": "Speaker_001",
-  "gender": "Male",
-  "age": "23",
-  "dialect": "Urban",
   "text": "Tunapokea malipo kabla ya delivery, kupitia M-Pesa au bank transfer.",
-  "timestamp": "20250319_103742",
-  "sample_rate": 22050,
-  "duration": 4.911020408163266
+  "processed_text": "tunapokea malipo kabla ya delivery, kupitia m-pesa au bank transfer.",
+  "speaker_id": "Speaker_001"
 }

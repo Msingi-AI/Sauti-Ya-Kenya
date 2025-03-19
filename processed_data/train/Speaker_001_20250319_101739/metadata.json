@@ -1,10 +1,5 @@
 {
-  "speaker_id": "Speaker_001",
-  "gender": "Male",
-  "age": "23",
-  "dialect": "Urban",
   "text": "Karibu sana! Unatafuta nini leo?",
-  "timestamp": "20250319_101739",
-  "sample_rate": 22050,
-  "duration": 3.3436734693877552
+  "processed_text": "karibu sana! unatafuta nini leo?",
+  "speaker_id": "Speaker_001"
 }

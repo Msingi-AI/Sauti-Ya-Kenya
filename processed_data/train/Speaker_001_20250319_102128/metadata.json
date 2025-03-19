@@ -1,10 +1,5 @@
 {
-  "speaker_id": "Speaker_001",
-  "gender": "Male",
-  "age": "23",
-  "dialect": "Urban",
   "text": "Madam, mtoto wako ako na fever, tunahitaji kumfanyia tests.",
-  "timestamp": "20250319_102128",
-  "sample_rate": 22050,
-  "duration": 4.54530612244898
+  "processed_text": "madam, mtoto wako ako na fever, tunahitaji kumfanyia tests.",
+  "speaker_id": "Speaker_001"
 }

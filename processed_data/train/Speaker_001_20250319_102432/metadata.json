@@ -1,10 +1,5 @@
 {
-  "speaker_id": "Speaker_001",
-  "gender": "Male",
-  "age": "23",
-  "dialect": "Urban",
   "text": "Mpesa imekuja na feature mpya ya overdraft, unataka kuactivate?",
-  "timestamp": "20250319_102432",
-  "sample_rate": 22050,
-  "duration": 4.284081632653061
+  "processed_text": "mpesa imekuja na feature mpya ya overdraft, unataka kuactivate?",
+  "speaker_id": "Speaker_001"
 }

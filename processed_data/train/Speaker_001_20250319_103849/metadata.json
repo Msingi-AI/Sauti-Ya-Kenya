@@ -1,10 +1,5 @@
 {
-  "speaker_id": "Speaker_001",
-  "gender": "Male",
-  "age": "23",
-  "dialect": "Urban",
   "text": "Nashukuru kwa maelezo. Tumefunga laini yako kwa muda. Kama utahitaji kuitumia tena, tafadhali tembelea duka letu la karibu na kitambulisho chako",
-  "timestamp": "20250319_103849",
-  "sample_rate": 22050,
-  "duration": 9.456326530612245
+  "processed_text": "nashukuru kwa maelezo. tumefunga laini yako kwa muda. kama utahitaji kuitumia tena, tafadhali tembelea duka letu la karibu na kitambulisho chako",
+  "speaker_id": "Speaker_001"
 }

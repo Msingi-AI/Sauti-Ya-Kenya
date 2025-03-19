@@ -1,10 +1,5 @@
 {
-  "speaker_id": "Speaker_001",
-  "gender": "Male",
-  "age": "23",
-  "dialect": "Urban",
-  "text": "Haya, let\u2019s switch to English kidogo, what is the main theme of this book?",
-  "timestamp": "20250319_101348",
-  "sample_rate": 22050,
-  "duration": 4.911020408163266
+  "text": "Haya, let’s switch to English kidogo, what is the main theme of this book?",
+  "processed_text": "haya, lets switch to english kidogo, what is the main theme of this book?",
+  "speaker_id": "Speaker_001"
 }

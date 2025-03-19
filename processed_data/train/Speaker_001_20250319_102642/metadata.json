@@ -1,10 +1,5 @@
 {
-  "speaker_id": "Speaker_001",
-  "gender": "Male",
-  "age": "23",
-  "dialect": "Urban",
   "text": "Data collection ni muhimu, ndio maana tunataka voices nyingi tofauti.",
-  "timestamp": "20250319_102642",
-  "sample_rate": 22050,
-  "duration": 3.5526530612244898
+  "processed_text": "data collection ni muhimu, ndio maana tunataka voices nyingi tofauti.",
+  "speaker_id": "Speaker_001"
 }
