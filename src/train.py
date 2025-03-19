@@ -1,305 +1,277 @@
 """
 Training script for Kenyan Swahili TTS model
 """
+import os
+import json
 import torch
 import torch.nn as nn
-import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import OneCycleLR
 from pathlib import Path
-import json
+import torchaudio
 import numpy as np
+from typing import Dict, List, Tuple
 from tqdm import tqdm
-import wandb
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass
 
-from src.model import KenyanSwahiliTTS
-from src.vocoder import HiFiGAN
-from src.evaluation import TTSEvaluator
+from .model import FastSpeech2, TTSLoss
+from .preprocessor import TextPreprocessor, SwahiliTokenizer
 
-@dataclass
-class TrainingConfig:
-    """Training configuration"""
-    # Data paths
-    train_dir: str = "processed_data/train"
-    val_dir: str = "processed_data/val"
-    checkpoint_dir: str = "checkpoints"
-    
-    # Model parameters
-    hidden_size: int = 384
-    n_heads: int = 4
-    n_layers: int = 6
-    vocab_size: int = 8000
-    n_mel_channels: int = 80
-    
-    # Training parameters
-    batch_size: int = 16
-    learning_rate: float = 0.001
-    max_epochs: int = 1000
-    warmup_steps: int = 4000
-    grad_clip_thresh: float = 1.0
-    
-    # Validation
-    val_interval: int = 1000
-    checkpoint_interval: int = 5000
-    
-    # Device
-    device: str = "cuda" if torch.cuda.is_available() else "cpu"
-
-class SwahiliTTSDataset(Dataset):
-    """Dataset for TTS training"""
-    def __init__(self, data_dir: str):
+class TTSDataset(Dataset):
+    def __init__(self, data_dir: str, split: str = 'train'):
         self.data_dir = Path(data_dir)
-        self.examples = []
-        self._load_examples()
-        
-    def _load_examples(self):
-        """Load all examples from data directory"""
-        for example_dir in self.data_dir.iterdir():
-            if example_dir.is_dir():
-                self.examples.append(example_dir)
-                
+        self.split_dir = self.data_dir / split
+        self.metadata = self._load_metadata()
+        self.tokenizer = SwahiliTokenizer()
+        self.text_processor = TextPreprocessor(self.tokenizer)
+
+    def _load_metadata(self) -> List[Dict]:
+        metadata = []
+        for speaker_dir in self.split_dir.iterdir():
+            if speaker_dir.is_dir():
+                meta_file = speaker_dir / 'metadata.json'
+                if meta_file.exists():
+                    with open(meta_file, 'r', encoding='utf-8') as f:
+                        speaker_meta = json.load(f)
+                        metadata.append({
+                            'speaker_id': speaker_dir.name,
+                            'text': speaker_meta['text'],
+                            'mel_path': str(speaker_dir / 'mel.pt'),
+                            'duration_path': str(speaker_dir / 'duration.pt')
+                        })
+        return metadata
+
     def __len__(self) -> int:
-        return len(self.examples)
-        
+        return len(self.metadata)
+
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
-        example_dir = self.examples[idx]
+        item = self.metadata[idx]
         
-        # Load tensors
-        audio = torch.load(example_dir / "audio.pt")
-        mel = torch.load(example_dir / "mel.pt")
-        tokens = torch.load(example_dir / "tokens.pt")
+        # Load text
+        text = item['text']
+        tokens = self.text_processor.process_text(text)
         
-        # Load metadata
-        with open(example_dir / "metadata.json", "r") as f:
-            metadata = json.load(f)
-            
+        # Load mel spectrogram
+        mel = torch.load(item['mel_path'])
+        
+        # Load duration
+        duration = torch.load(item['duration_path'])
+        
         return {
-            "audio": audio,
-            "mel": mel,
-            "tokens": torch.tensor(tokens),
-            "speaker_id": metadata["speaker_id"],
-            "text": metadata["text"]
+            'text': tokens.token_ids,
+            'mel': mel,
+            'duration': duration,
+            'speaker_id': item['speaker_id']
         }
+
+def collate_fn(batch: List[Dict]) -> Dict[str, torch.Tensor]:
+    # Get max lengths
+    max_text_len = max(len(x['text']) for x in batch)
+    max_mel_len = max(x['mel'].size(0) for x in batch)
+    
+    # Initialize tensors
+    text_padded = torch.zeros(len(batch), max_text_len, dtype=torch.long)
+    mel_padded = torch.zeros(len(batch), max_mel_len, 80)
+    duration_padded = torch.zeros(len(batch), max_text_len, dtype=torch.long)
+    
+    # Fill tensors
+    for i, item in enumerate(batch):
+        text = torch.tensor(item['text'])
+        mel = item['mel']
+        duration = item['duration']
+        
+        text_padded[i, :text.size(0)] = text
+        mel_padded[i, :mel.size(0)] = mel
+        duration_padded[i, :duration.size(0)] = duration
+    
+    return {
+        'text': text_padded,
+        'mel': mel_padded,
+        'duration': duration_padded
+    }
 
 class Trainer:
-    """TTS model trainer"""
-    def __init__(self, config: TrainingConfig):
-        self.config = config
-        self.setup_wandb()
-        self.setup_data()
-        self.setup_model()
-        self.setup_training()
-        self.evaluator = TTSEvaluator()
+    def __init__(self,
+                 model: nn.Module,
+                 train_loader: DataLoader,
+                 val_loader: DataLoader,
+                 optimizer: torch.optim.Optimizer,
+                 scheduler: torch.optim.lr_scheduler._LRScheduler,
+                 loss_fn: nn.Module,
+                 device: torch.device,
+                 checkpoint_dir: str):
+        self.model = model
+        self.train_loader = train_loader
+        self.val_loader = val_loader
+        self.optimizer = optimizer
+        self.scheduler = scheduler
+        self.loss_fn = loss_fn
+        self.device = device
+        self.checkpoint_dir = Path(checkpoint_dir)
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         
-    def setup_wandb(self):
-        """Initialize Weights & Biases logging"""
-        wandb.init(
-            project="kenyan-swahili-tts",
-            config=self.config.__dict__
-        )
+        self.best_loss = float('inf')
+        self.epochs_without_improvement = 0
+        self.max_epochs_without_improvement = 10
+
+    def train_epoch(self) -> dict:
+        self.model.train()
+        total_loss = 0
         
-    def setup_data(self):
-        """Setup data loaders"""
-        # Create datasets
-        train_dataset = SwahiliTTSDataset(self.config.train_dir)
-        val_dataset = SwahiliTTSDataset(self.config.val_dir)
+        with tqdm(self.train_loader, desc='Training') as pbar:
+            for batch in pbar:
+                # Move batch to device
+                text = batch['text'].to(self.device)
+                mel = batch['mel'].to(self.device)
+                duration = batch['duration'].to(self.device)
+                
+                # Forward pass
+                mel_output, duration_pred = self.model(text, duration_target=duration)
+                
+                # Calculate loss
+                loss, metrics = self.loss_fn(mel_output, duration_pred, mel, duration)
+                
+                # Backward pass
+                self.optimizer.zero_grad()
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                self.optimizer.step()
+                self.scheduler.step()
+                
+                # Update progress bar
+                total_loss += loss.item()
+                pbar.set_postfix(loss=f'{loss.item():.4f}')
         
-        # Create data loaders
-        self.train_loader = DataLoader(
-            train_dataset,
-            batch_size=self.config.batch_size,
-            shuffle=True,
-            num_workers=4,
-            pin_memory=True
-        )
+        return {'loss': total_loss / len(self.train_loader)}
+
+    def validate(self) -> dict:
+        self.model.eval()
+        total_loss = 0
         
-        self.val_loader = DataLoader(
-            val_dataset,
-            batch_size=self.config.batch_size,
-            shuffle=False,
-            num_workers=4,
-            pin_memory=True
-        )
+        with torch.no_grad():
+            with tqdm(self.val_loader, desc='Validation') as pbar:
+                for batch in pbar:
+                    # Move batch to device
+                    text = batch['text'].to(self.device)
+                    mel = batch['mel'].to(self.device)
+                    duration = batch['duration'].to(self.device)
+                    
+                    # Forward pass
+                    mel_output, duration_pred = self.model(text, duration_target=duration)
+                    
+                    # Calculate loss
+                    loss, metrics = self.loss_fn(mel_output, duration_pred, mel, duration)
+                    
+                    # Update progress
+                    total_loss += loss.item()
+                    pbar.set_postfix(loss=f'{loss.item():.4f}')
         
-    def setup_model(self):
-        """Setup model, vocoder, and move to device"""
-        # Create model
-        self.model = KenyanSwahiliTTS(self.config)
-        self.model.to(self.config.device)
-        
-        # Create vocoder
-        self.vocoder = HiFiGAN()
-        self.vocoder.to(self.config.device)
-        
-    def setup_training(self):
-        """Setup optimizer and scheduler"""
-        self.optimizer = optim.AdamW(
-            self.model.parameters(),
-            lr=self.config.learning_rate,
-            betas=(0.9, 0.98),
-            eps=1e-9
-        )
-        
-        # Learning rate scheduler with warmup
-        self.scheduler = optim.lr_scheduler.OneCycleLR(
-            self.optimizer,
-            max_lr=self.config.learning_rate,
-            epochs=self.config.max_epochs,
-            steps_per_epoch=len(self.train_loader),
-            pct_start=0.1
-        )
-        
-    def save_checkpoint(self, step: int):
-        """Save model checkpoint"""
-        checkpoint_path = Path(self.config.checkpoint_dir) / f"model_step_{step}.pt"
-        checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        torch.save({
-            "step": step,
-            "model_state_dict": self.model.state_dict(),
-            "optimizer_state_dict": self.optimizer.state_dict(),
-            "scheduler_state_dict": self.scheduler.state_dict()
-        }, checkpoint_path)
-        
-    def load_checkpoint(self, checkpoint_path: str):
-        """Load model checkpoint"""
-        checkpoint = torch.load(checkpoint_path)
-        self.model.load_state_dict(checkpoint["model_state_dict"])
-        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
-        return checkpoint["step"]
-        
-    def train_step(self, batch: Dict[str, torch.Tensor]) -> Dict[str, float]:
-        """Single training step"""
-        # Move batch to device
-        tokens = batch["tokens"].to(self.config.device)
-        mel_target = batch["mel"].to(self.config.device)
-        
-        # Forward pass
-        mel_output, durations = self.model(tokens)
-        
-        # Generate audio
-        audio_output = self.vocoder(mel_output)
-        
-        # Compute losses
-        mel_loss = nn.MSELoss()(mel_output, mel_target)
-        duration_loss = nn.MSELoss()(durations, torch.ones_like(durations))  # Placeholder
-        
-        # Total loss
-        loss = mel_loss + duration_loss
-        
-        # Backward pass
-        self.optimizer.zero_grad()
-        loss.backward()
-        
-        # Gradient clipping
-        torch.nn.utils.clip_grad_norm_(
-            self.model.parameters(),
-            self.config.grad_clip_thresh
-        )
-        
-        # Update weights
-        self.optimizer.step()
-        self.scheduler.step()
-        
-        return {
-            "loss": loss.item(),
-            "mel_loss": mel_loss.item(),
-            "duration_loss": duration_loss.item()
+        return {'loss': total_loss / len(self.val_loader)}
+
+    def save_checkpoint(self, epoch: int, loss: float):
+        checkpoint = {
+            'epoch': epoch,
+            'model_state_dict': self.model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'scheduler_state_dict': self.scheduler.state_dict(),
+            'loss': loss
         }
         
-    @torch.no_grad()
-    def validate(self) -> Dict[str, float]:
-        """Run validation"""
-        self.model.eval()
-        val_losses = []
+        # Save latest checkpoint
+        torch.save(checkpoint, self.checkpoint_dir / 'latest.pt')
         
-        for batch in self.val_loader:
-            # Move batch to device
-            tokens = batch["tokens"].to(self.config.device)
-            mel_target = batch["mel"].to(self.config.device)
-            audio_target = batch["audio"].to(self.config.device)
+        # Save best checkpoint
+        if loss < self.best_loss:
+            self.best_loss = loss
+            self.epochs_without_improvement = 0
+            torch.save(checkpoint, self.checkpoint_dir / 'best.pt')
+        else:
+            self.epochs_without_improvement += 1
+
+    def train(self, num_epochs: int):
+        for epoch in range(num_epochs):
+            print(f'\nEpoch {epoch + 1}/{num_epochs}')
             
-            # Forward pass
-            mel_output, durations = self.model(tokens)
-            audio_output = self.vocoder(mel_output)
+            # Training phase
+            train_metrics = self.train_epoch()
+            print(f'Training Loss: {train_metrics["loss"]:.4f}')
             
-            # Compute metrics
-            metrics = self.evaluator.evaluate_batch(
-                audio_output,
-                audio_target,
-                mel_output,
-                mel_target,
-                durations,
-                torch.ones_like(durations)  # Placeholder
-            )
+            # Validation phase
+            val_metrics = self.validate()
+            print(f'Validation Loss: {val_metrics["loss"]:.4f}')
             
-            val_losses.append(metrics)
+            # Save checkpoint
+            self.save_checkpoint(epoch, val_metrics['loss'])
             
-        # Average metrics
-        avg_metrics = {}
-        for key in val_losses[0].keys():
-            avg_metrics[key] = np.mean([l[key] for l in val_losses])
-            
-        self.model.train()
-        return avg_metrics
-        
-    def train(self, resume_from: Optional[str] = None):
-        """Train the model"""
-        # Resume from checkpoint if specified
-        start_step = 0
-        if resume_from:
-            start_step = self.load_checkpoint(resume_from)
-            
-        # Training loop
-        step = start_step
-        self.model.train()
-        
-        with tqdm(total=self.config.max_epochs * len(self.train_loader)) as pbar:
-            for epoch in range(self.config.max_epochs):
-                for batch in self.train_loader:
-                    # Training step
-                    losses = self.train_step(batch)
-                    
-                    # Update progress bar
-                    pbar.update(1)
-                    pbar.set_postfix(loss=f"{losses['loss']:.4f}")
-                    
-                    # Log metrics
-                    wandb.log({
-                        "train/loss": losses["loss"],
-                        "train/mel_loss": losses["mel_loss"],
-                        "train/duration_loss": losses["duration_loss"],
-                        "train/learning_rate": self.scheduler.get_last_lr()[0]
-                    }, step=step)
-                    
-                    # Validation
-                    if step > 0 and step % self.config.val_interval == 0:
-                        val_metrics = self.validate()
-                        wandb.log({
-                            f"val/{k}": v for k, v in val_metrics.items()
-                        }, step=step)
-                        
-                    # Save checkpoint
-                    if step > 0 and step % self.config.checkpoint_interval == 0:
-                        self.save_checkpoint(step)
-                        
-                    step += 1
-                    
-        # Save final checkpoint
-        self.save_checkpoint(step)
-        wandb.finish()
+            # Early stopping
+            if self.epochs_without_improvement >= self.max_epochs_without_improvement:
+                print('Early stopping triggered')
+                break
 
 def main():
-    # Create config
-    config = TrainingConfig()
+    # Set device
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f'Using device: {device}')
     
-    # Create trainer
-    trainer = Trainer(config)
+    # Data loading
+    train_dataset = TTSDataset('processed_data', split='train')
+    val_dataset = TTSDataset('processed_data', split='val')
+    
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=32,
+        shuffle=True,
+        collate_fn=collate_fn,
+        num_workers=4
+    )
+    
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=32,
+        shuffle=False,
+        collate_fn=collate_fn,
+        num_workers=4
+    )
+    
+    # Model initialization
+    model = FastSpeech2(
+        vocab_size=8000,  # Match with tokenizer vocab size
+        d_model=384,
+        n_enc_layers=4,
+        n_dec_layers=4,
+        n_heads=2,
+        d_ff=1536,
+        n_mels=80,
+        dropout=0.1
+    ).to(device)
+    
+    # Optimizer and scheduler
+    optimizer = AdamW(model.parameters(), lr=0.001, weight_decay=0.01)
+    scheduler = OneCycleLR(
+        optimizer,
+        max_lr=0.001,
+        epochs=100,
+        steps_per_epoch=len(train_loader),
+        pct_start=0.1
+    )
+    
+    # Loss function
+    loss_fn = TTSLoss().to(device)
+    
+    # Initialize trainer
+    trainer = Trainer(
+        model=model,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        loss_fn=loss_fn,
+        device=device,
+        checkpoint_dir='checkpoints'
+    )
     
     # Start training
-    trainer.train()
+    trainer.train(num_epochs=100)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
