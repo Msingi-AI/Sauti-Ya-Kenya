@@ -55,24 +55,34 @@ class FFTBlock(nn.Module):
 class LengthRegulator(nn.Module):
     def __init__(self, d_model: int):
         super().__init__()
-        self.duration_predictor = nn.Sequential(
-            nn.Conv1d(d_model, d_model, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.LayerNorm([d_model]),
-            nn.Dropout(0.1),
-            nn.Conv1d(d_model, d_model, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.LayerNorm([d_model]),
-            nn.Dropout(0.1),
-            nn.Linear(d_model, 1)
-        )
+        self.d_model = d_model
+        self.conv1 = nn.Conv1d(d_model, d_model, kernel_size=3, padding=1)
+        self.relu1 = nn.ReLU()
+        self.norm1 = nn.LayerNorm(d_model)
+        self.dropout1 = nn.Dropout(0.1)
+        self.conv2 = nn.Conv1d(d_model, d_model, kernel_size=3, padding=1)
+        self.relu2 = nn.ReLU()
+        self.norm2 = nn.LayerNorm(d_model)
+        self.dropout2 = nn.Dropout(0.1)
+        self.linear = nn.Linear(d_model, 1)
 
     def forward(self, 
                 encoder_output: torch.Tensor,
                 duration_target: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
         # Predict duration
-        duration_predictor_output = self.duration_predictor(encoder_output.transpose(1, 2))
-        duration_predictor_output = duration_predictor_output.squeeze(-1)
+        x = encoder_output.transpose(1, 2)  # [batch, time, channels] -> [batch, channels, time]
+        x = self.conv1(x)
+        x = self.relu1(x)
+        x = x.transpose(1, 2)  # [batch, channels, time] -> [batch, time, channels]
+        x = self.norm1(x)
+        x = self.dropout1(x)
+        x = x.transpose(1, 2)  # [batch, time, channels] -> [batch, channels, time]
+        x = self.conv2(x)
+        x = self.relu2(x)
+        x = x.transpose(1, 2)  # [batch, channels, time] -> [batch, time, channels]
+        x = self.norm2(x)
+        x = self.dropout2(x)
+        duration_predictor_output = self.linear(x).squeeze(-1)
 
         if self.training:
             duration_rounded = duration_target
