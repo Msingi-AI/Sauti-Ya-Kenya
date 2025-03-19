@@ -118,5 +118,345 @@
     "timestamp": "20250319_101646",
     "sample_rate": 22050,
     "duration": 3.213061224489796
+  },
+  "Speaker_001_20250319_101739.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Karibu sana! Unatafuta nini leo?",
+    "timestamp": "20250319_101739",
+    "sample_rate": 22050,
+    "duration": 3.3436734693877552
+  },
+  "Speaker_001_20250319_101846.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Tafadhali customer, confirm order yako kabla hatujai-process.",
+    "timestamp": "20250319_101846",
+    "sample_rate": 22050,
+    "duration": 4.362448979591837
+  },
+  "Speaker_001_20250319_101923.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "We accept Visa, Mastercard, na PayPal pia.",
+    "timestamp": "20250319_101923",
+    "sample_rate": 22050,
+    "duration": 3.657142857142857
+  },
+  "Speaker_001_20250319_102019.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Customer, hii stock haijafika, lakini inaweza fika kesho.",
+    "timestamp": "20250319_102019",
+    "sample_rate": 22050,
+    "duration": 3.813877551020408
+  },
+  "Speaker_001_20250319_102057.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Kenya",
+    "timestamp": "20250319_102057",
+    "sample_rate": 22050,
+    "duration": 1.436734693877551
+  },
+  "Speaker_001_20250319_102128.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Madam, mtoto wako ako na fever, tunahitaji kumfanyia tests.",
+    "timestamp": "20250319_102128",
+    "sample_rate": 22050,
+    "duration": 4.54530612244898
+  },
+  "Speaker_001_20250319_102202.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Kunywa dawa hii mara tatu kwa siku, baada ya chakula.",
+    "timestamp": "20250319_102202",
+    "sample_rate": 22050,
+    "duration": 3.500408163265306
+  },
+  "Speaker_001_20250319_102230.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Fare ni ngapi hadi Rongai?",
+    "timestamp": "20250319_102230",
+    "sample_rate": 22050,
+    "duration": 1.7763265306122449
+  },
+  "Speaker_001_20250319_102311.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Hii mat iko na Wi-Fi kweli ama ni zile za kupea watu hopes?",
+    "timestamp": "20250319_102311",
+    "sample_rate": 22050,
+    "duration": 4.284081632653061
+  },
+  "Speaker_001_20250319_102358.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Habari, unawithdraw ama unadeposit pesa?",
+    "timestamp": "20250319_102358",
+    "sample_rate": 22050,
+    "duration": 2.84734693877551
+  },
+  "Speaker_001_20250319_102432.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Mpesa imekuja na feature mpya ya overdraft, unataka kuactivate?",
+    "timestamp": "20250319_102432",
+    "sample_rate": 22050,
+    "duration": 4.284081632653061
+  },
+  "Speaker_001_20250319_102452.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Msee ni noma sana",
+    "timestamp": "20250319_102452",
+    "sample_rate": 22050,
+    "duration": 1.750204081632653
+  },
+  "Speaker_001_20250319_102529.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Sauti yako imerekodiwa successfully, tafadhali confirm before saving",
+    "timestamp": "20250319_102529",
+    "sample_rate": 22050,
+    "duration": 3.996734693877551
+  },
+  "Speaker_001_20250319_102615.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Mnatumia Machine Learning Kwa Hii Project?",
+    "timestamp": "20250319_102615",
+    "sample_rate": 22050,
+    "duration": 2.5338775510204083
+  },
+  "Speaker_001_20250319_102642.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Data collection ni muhimu, ndio maana tunataka voices nyingi tofauti.",
+    "timestamp": "20250319_102642",
+    "sample_rate": 22050,
+    "duration": 3.5526530612244898
+  },
+  "Speaker_001_20250319_102722.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Simu yangu imepotea, kuna mtu ameiona?",
+    "timestamp": "20250319_102722",
+    "sample_rate": 22050,
+    "duration": 2.84734693877551
+  },
+  "Speaker_001_20250319_102748.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Haraka! Tunahitaji polisi kwa eneo hili!",
+    "timestamp": "20250319_102748",
+    "sample_rate": 22050,
+    "duration": 2.873469387755102
+  },
+  "Speaker_001_20250319_103017.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Fuliza ni huduma ya overdraft inayokuruhusu kutumia M-Pesa hata kama huna pesa ya kutosha. Ukiwa na limit ya Fuliza, unaweza kufanya transaction na utalipa baadaye.",
+    "timestamp": "20250319_103017",
+    "sample_rate": 22050,
+    "duration": 9.482448979591837
+  },
+  "Speaker_001_20250319_103053.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Habari, naweza kusaidiwa? Nilijaribu kutoa pesa kwa ATM lakini transaction haijakamilika",
+    "timestamp": "20250319_103053",
+    "sample_rate": 22050,
+    "duration": 5.773061224489796
+  },
+  "Speaker_001_20250319_103236.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Pole sana kwa hilo, mteja wetu. Tafadhali, unaweza kunipa account number yako au kadi yako ya benki ili nikague?",
+    "timestamp": "20250319_103236",
+    "sample_rate": 22050,
+    "duration": 7.026938775510204
+  },
+  "Speaker_001_20250319_103310.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Okay, lakini kuna njia yoyote naweza fuatilia hii issue nikitoka hapa?",
+    "timestamp": "20250319_103310",
+    "sample_rate": 22050,
+    "duration": 4.702040816326531
+  },
+  "Speaker_001_20250319_103413.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Ndio, unaweza kupigia customer care kwa namba hii: 0700 123 456 au utumie online banking app yetu kwa updates.",
+    "timestamp": "20250319_103413",
+    "sample_rate": 22050,
+    "duration": 9.508571428571429
+  },
+  "Speaker_001_20250319_103505.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Ndio! Unaweza kupata replacement kwa shilingi 100 tu. Tafadhali utembelee duka la Safaricom na ID yako ili tukusaidie.",
+    "timestamp": "20250319_103505",
+    "sample_rate": 22050,
+    "duration": 7.444897959183673
+  },
+  "Speaker_001_20250319_103535.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Hii TV mnauza bado ama ni out of stock?",
+    "timestamp": "20250319_103535",
+    "sample_rate": 22050,
+    "duration": 3.317551020408163
+  },
+  "Speaker_001_20250319_103616.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Bado tunayo, na tuko na discount ya 10% kwa order ya leo.",
+    "timestamp": "20250319_103616",
+    "sample_rate": 22050,
+    "duration": 4.048979591836734
+  },
+  "Speaker_001_20250319_103713.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Nairobi, tunadeliver within 24 hours. Outside Nairobi inachukua siku mbili hadi tatu.",
+    "timestamp": "20250319_103713",
+    "sample_rate": 22050,
+    "duration": 6.086530612244898
+  },
+  "Speaker_001_20250319_103742.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Tunapokea malipo kabla ya delivery, kupitia M-Pesa au bank transfer.",
+    "timestamp": "20250319_103742",
+    "sample_rate": 22050,
+    "duration": 4.911020408163266
+  },
+  "Speaker_001_20250319_103809.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Asante sana! Tutakutumia tracking number mara tu mzigo uondoke",
+    "timestamp": "20250319_103809",
+    "sample_rate": 22050,
+    "duration": 5.198367346938776
+  },
+  "Speaker_001_20250319_103849.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Nashukuru kwa maelezo. Tumefunga laini yako kwa muda. Kama utahitaji kuitumia tena, tafadhali tembelea duka letu la karibu na kitambulisho chako",
+    "timestamp": "20250319_103849",
+    "sample_rate": 22050,
+    "duration": 9.456326530612245
+  },
+  "Speaker_001_20250319_103933.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Ndio! Unaweza kupata replacement kwa shilingi 100 tu. Tafadhali utembelee duka la Safaricom na ID yako ili tukusaidie.",
+    "timestamp": "20250319_103933",
+    "sample_rate": 22050,
+    "duration": 7.314285714285714
+  },
+  "Speaker_001_20250319_104042.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Sure! Are you asking about M-Pesa, bank account, or another service?",
+    "timestamp": "20250319_104042",
+    "sample_rate": 22050,
+    "duration": 4.388571428571429
+  },
+  "Speaker_001_20250319_104122.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "I can't access your M-Pesa balance directly, but you can check by dialing *334# or using the Safaricom app.",
+    "timestamp": "20250319_104122",
+    "sample_rate": 22050,
+    "duration": 7.209795918367347
+  },
+  "Speaker_001_20250319_104159.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Yes! To activate Fuliza, dial *234# and follow the prompts. You\u2019ll need to have an active M-Pesa account and a good transaction history.",
+    "timestamp": "20250319_104159",
+    "sample_rate": 22050,
+    "duration": 9.351836734693878
+  },
+  "Speaker_001_20250319_104553.wav": {
+    "speaker_id": "Speaker_001",
+    "gender": "Male",
+    "age": "23",
+    "dialect": "Urban",
+    "text": "Ndio bro, nadhani wengi wetu tumepitia wakati mgumu. Mimi nilikuwa naanza biashara ya kuuza mitumba Gikomba, lakini sikuwa na hata shilingi elfu moja. Kila mtu alikuwa ananiambia, \u2018Wewe huwezi make it, hii biashara ni ngumu.\u2019 Lakini personally nilijua kwamba lazima nijaribu.\n\nKuna day, nilichukua 500 bob pekee niliyokuwa nayo, nikanunua nguo tano za mitumba. Nikaanza kuuza kwa marafiki wangu, na baada ya wiki moja, nilikuwa nimeshafanya profit ya 2,000. Ilikuwa kidogo, lakini ilinipa motisha. Leo hii, mimi ni mmiliki wa duka la mitumba lenye matawi matatu Nairobi.",
+    "timestamp": "20250319_104553",
+    "sample_rate": 22050,
+    "duration": 39.732244897959184
   }
 }
