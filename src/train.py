@@ -11,7 +11,7 @@ from torch.optim.lr_scheduler import OneCycleLR
 from pathlib import Path
 import torchaudio
 import numpy as np
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 from tqdm import tqdm
 
 from .model import FastSpeech2, TTSLoss
@@ -186,7 +186,9 @@ class Trainer:
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'scheduler_state_dict': self.scheduler.state_dict(),
-            'loss': loss
+            'loss': loss,
+            'best_loss': self.best_loss,
+            'epochs_without_improvement': self.epochs_without_improvement
         }
         
         # Save latest checkpoint
@@ -197,11 +199,34 @@ class Trainer:
             self.best_loss = loss
             self.epochs_without_improvement = 0
             torch.save(checkpoint, self.checkpoint_dir / 'best.pt')
+            print(f"New best model saved! Loss: {loss:.4f}")
         else:
             self.epochs_without_improvement += 1
+            
+        # Save periodic checkpoint (every 10 epochs)
+        if (epoch + 1) % 10 == 0:
+            torch.save(checkpoint, self.checkpoint_dir / f'checkpoint_epoch_{epoch+1}.pt')
+            print(f"Saved periodic checkpoint at epoch {epoch+1}")
 
-    def train(self, num_epochs: int):
-        for epoch in range(num_epochs):
+    def load_checkpoint(self, checkpoint_path: str) -> int:
+        print(f"Loading checkpoint from {checkpoint_path}")
+        checkpoint = torch.load(checkpoint_path, map_location=self.device)
+        
+        self.model.load_state_dict(checkpoint['model_state_dict'])
+        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        self.best_loss = checkpoint['best_loss']
+        self.epochs_without_improvement = checkpoint['epochs_without_improvement']
+        
+        return checkpoint['epoch']
+
+    def train(self, num_epochs: int, resume_from: Optional[str] = None):
+        start_epoch = 0
+        if resume_from:
+            start_epoch = self.load_checkpoint(resume_from) + 1
+            print(f"Resuming training from epoch {start_epoch}")
+        
+        for epoch in range(start_epoch, num_epochs):
             print(f'\nEpoch {epoch + 1}/{num_epochs}')
             
             # Training phase
@@ -217,10 +242,15 @@ class Trainer:
             
             # Early stopping
             if self.epochs_without_improvement >= self.max_epochs_without_improvement:
-                print('Early stopping triggered')
+                print(f"No improvement for {self.max_epochs_without_improvement} epochs. Stopping training.")
                 break
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description='Train TTS model')
+    parser.add_argument('--resume', type=str, help='Path to checkpoint to resume from')
+    args = parser.parse_args()
+    
     # Set device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
@@ -274,6 +304,10 @@ def main():
     # Initialize loss function
     loss_fn = TTSLoss().to(device)
     
+    # Create checkpoints directory
+    checkpoint_dir = Path('checkpoints')
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    
     # Initialize trainer
     trainer = Trainer(
         model=model,
@@ -283,11 +317,11 @@ def main():
         scheduler=scheduler,
         loss_fn=loss_fn,
         device=device,
-        checkpoint_dir='checkpoints'
+        checkpoint_dir=checkpoint_dir
     )
     
     # Train model
-    trainer.train(num_epochs=100)
+    trainer.train(num_epochs=100, resume_from=args.resume)
 
 if __name__ == '__main__':
     main()
