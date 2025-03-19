@@ -117,47 +117,33 @@ python -m src.train
 
 ### Training on Google Colab
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Msingi-AI/Sauti-Ya-Kenya/blob/main/notebooks/train_on_colab.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Msingi-AI/Sauti-Ya-Kenya/blob/main/notebooks/sauti_ya_kenya_training.ipynb)
 
-Click the badge above to open the training notebook in Google Colab. For optimal training with GPU memory management:
+Click the badge above to open our optimized training notebook in Google Colab. The notebook includes:
 
-```bash
-# Start training with memory optimization
-python -m src.train --batch_size 8 --grad_accum 4
-```
+1. 🔍 Environment Setup
+   - GPU verification
+   - Drive mounting
+   - Repository setup
+   - Memory optimization
 
-Key Parameters:
-- `batch_size`: 8 (reduced from 32 to save memory)
-- `grad_accum`: 4 (gradient accumulation steps)
+2. 📊 Data Management
+   - Automatic data upload/extraction
+   - Preprocessing verification
+   - Directory structure setup
 
-The notebook will:
-1. Mount your Google Drive for persistent storage
-2. Set up a clean environment (removing any stale symlinks)
-3. Clone the latest code
-4. Install dependencies
-5. Upload and extract your data (if needed)
-6. Find existing checkpoints (if any)
-7. Train the model with GPU acceleration and memory optimization
-8. Save checkpoints to your Drive
+3. 🚀 Training with Memory Optimization
+   - Batch size: 8 (memory-efficient)
+   - Gradient accumulation: 4 steps
+   - Automatic checkpoint management
+   - GPU memory monitoring
 
-This allows you to:
-- Train on free GPU resources
-- Continue training across sessions
-- Keep your data and checkpoints safe in Drive
-- Make code changes locally while training in Colab
+4. 💾 Persistence
+   - Checkpoints saved to Drive
+   - Progress tracking
+   - Easy resume capability
 
-The notebook includes verification steps to ensure:
-- GPU is properly configured
-- Memory usage is optimized
-- Data is correctly loaded
-- Checkpoints are properly managed
-- Directory structure is clean
-
-Memory Management:
-- Uses gradient accumulation to reduce memory usage
-- Cleans up CUDA cache between batches
-- Monitors GPU memory usage
-- Sets optimal PyTorch memory allocator settings
+The notebook is designed to run efficiently on Colab's GPU while preventing out-of-memory errors.
 
 ### Resuming Training
 
@@ -250,20 +236,20 @@ For more examples and detailed API documentation, see our [API Reference](docs/a
 
 ```
 Sauti-Ya-Kenya/
-├── data/                  # Raw audio recordings and metadata
-├── processed_data/        # Preprocessed training data
-├── notebooks/            # Jupyter notebooks
-│   └── train_on_colab.ipynb # Colab training notebook
+├── data/                     # Raw audio recordings and metadata
+├── processed_data/           # Preprocessed training data
+├── notebooks/               # Jupyter notebooks
+│   └── sauti_ya_kenya_training.ipynb  # Optimized Colab training notebook
 ├── src/
-│   ├── data_collection.py # GUI tool for recording
-│   ├── preprocess_data.py # Data preprocessing pipeline
-│   ├── model.py          # FastSpeech 2 model implementation
-│   ├── train.py          # Training script
-│   └── api.py            # Inference API
-├── checkpoints/          # Model checkpoints
-├── CONTRIBUTING.md       # Contribution guidelines
-├── CODE_OF_CONDUCT.md    # Community code of conduct
-└── requirements.txt      # Project dependencies
+│   ├── data_collection.py   # GUI tool for recording
+│   ├── preprocess_data.py   # Data preprocessing pipeline
+│   ├── model.py            # FastSpeech 2 model implementation
+│   ├── train.py            # Training script with memory optimization
+│   └── api.py              # Inference API
+├── checkpoints/            # Model checkpoints
+├── CONTRIBUTING.md         # Contribution guidelines
+├── CODE_OF_CONDUCT.md      # Community code of conduct
+└── requirements.txt        # Project dependencies
 ```
 
 ## Model Architecture 🏗️
