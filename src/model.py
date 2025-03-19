@@ -92,15 +92,24 @@ class LengthRegulator(nn.Module):
                 min=0
             )
 
-        # Calculate maximum length
-        max_len = int(duration_rounded.sum(dim=1).max().item())
-
         # Regulate length
         expanded = []
-        for i, expanded_len in enumerate(duration_rounded):
-            expanded.append(encoder_output[i].repeat_interleave(expanded_len.long(), dim=0))
-        expanded = torch.stack([F.pad(x, (0, 0, 0, max_len - len(x))) 
-                              for x in expanded])
+        for i in range(encoder_output.size(0)):  # For each item in batch
+            expanded_frames = []
+            for j in range(encoder_output.size(1)):  # For each frame
+                expanded_frames.extend([encoder_output[i, j]] * duration_rounded[i, j].long().item())
+            expanded.append(torch.stack(expanded_frames))
+        
+        # Pad sequences to max length
+        max_len = max(x.size(0) for x in expanded)
+        padded = []
+        for x in expanded:
+            pad_len = max_len - x.size(0)
+            if pad_len > 0:
+                padded.append(F.pad(x, (0, 0, 0, pad_len)))
+            else:
+                padded.append(x)
+        expanded = torch.stack(padded)
 
         return expanded, duration_predictor_output
 
