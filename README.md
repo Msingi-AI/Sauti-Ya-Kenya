@@ -257,8 +257,7 @@ The model includes special handling for:
 
 ## License 📝
 
-[MIT]
-
+To be Determined
 ## Acknowledgments 🙏
 
 - FastSpeech 2 paper authors
@@ -268,7 +267,7 @@ The model includes special handling for:
 
 ## Contact 📧
 
-[information.msingiai@gmail.com]
+information.msingiai@gmail.com
 
 ---
 
