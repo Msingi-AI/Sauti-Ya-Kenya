@@ -53,65 +53,46 @@ class FFTBlock(nn.Module):
         return x
 
 class LengthRegulator(nn.Module):
-    def __init__(self, d_model: int):
+    def __init__(self):
         super().__init__()
-        self.d_model = d_model
-        self.conv1 = nn.Conv1d(d_model, d_model, kernel_size=3, padding=1)
-        self.relu1 = nn.ReLU()
-        self.norm1 = nn.LayerNorm(d_model)
-        self.dropout1 = nn.Dropout(0.1)
-        self.conv2 = nn.Conv1d(d_model, d_model, kernel_size=3, padding=1)
-        self.relu2 = nn.ReLU()
-        self.norm2 = nn.LayerNorm(d_model)
-        self.dropout2 = nn.Dropout(0.1)
-        self.linear = nn.Linear(d_model, 1)
-
-    def forward(self, 
-                encoder_output: torch.Tensor,
-                duration_target: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
-        # Predict duration
-        x = encoder_output.transpose(1, 2)  # [batch, time, channels] -> [batch, channels, time]
-        x = self.conv1(x)
-        x = self.relu1(x)
-        x = x.transpose(1, 2)  # [batch, channels, time] -> [batch, time, channels]
-        x = self.norm1(x)
-        x = self.dropout1(x)
-        x = x.transpose(1, 2)  # [batch, time, channels] -> [batch, channels, time]
-        x = self.conv2(x)
-        x = self.relu2(x)
-        x = x.transpose(1, 2)  # [batch, channels, time] -> [batch, time, channels]
-        x = self.norm2(x)
-        x = self.dropout2(x)
-        duration_predictor_output = self.linear(x).squeeze(-1)
-
-        if self.training:
+        self.length_layer = nn.Linear(384, 1)  # d_model -> 1
+        
+    def forward(self, x, duration_target=None):
+        """Expand encoder output according to predicted or target duration.
+        
+        Args:
+            x (Tensor): Encoder output [B, T, C]
+            duration_target (Tensor, optional): Target duration for training [B, T]
+            
+        Returns:
+            Tensor: Expanded features [B, T', C]
+            Tensor: Duration predictions [B, T]
+        """
+        duration_pred = self.length_layer(x).squeeze(-1)  # [B, T]
+        
+        if duration_target is not None:
             duration_rounded = duration_target
         else:
-            duration_rounded = torch.clamp(
-                torch.round(torch.exp(duration_predictor_output) - 1),
-                min=0
-            )
-
-        # Regulate length
-        expanded = []
-        for i in range(encoder_output.size(0)):  # For each item in batch
-            expanded_frames = []
-            for j in range(encoder_output.size(1)):  # For each frame
-                expanded_frames.extend([encoder_output[i, j]] * duration_rounded[i, j].long().item())
-            expanded.append(torch.stack(expanded_frames))
+            duration_rounded = torch.clamp(torch.round(torch.exp(duration_pred)), min=1)
         
-        # Pad sequences to max length
-        max_len = max(x.size(0) for x in expanded)
-        padded = []
-        for x in expanded:
-            pad_len = max_len - x.size(0)
-            if pad_len > 0:
-                padded.append(F.pad(x, (0, 0, 0, pad_len)))
-            else:
-                padded.append(x)
-        expanded = torch.stack(padded)
-
-        return expanded, duration_predictor_output
+        # Calculate expanded sequence lengths
+        expand_length = torch.sum(duration_rounded, dim=1).long()  # [B]
+        max_length = expand_length.max()
+        
+        # Initialize output tensor
+        batch_size, _, channels = x.size()
+        expanded = x.new_zeros((batch_size, max_length, channels))
+        
+        # Expand each batch item
+        for i in range(batch_size):
+            expanded_idx = 0
+            for j, duration in enumerate(duration_rounded[i]):
+                duration = int(duration.item())
+                if duration > 0:  # Only expand if duration > 0
+                    expanded[i, expanded_idx:expanded_idx + duration] = x[i, j].unsqueeze(0).expand(duration, -1)
+                    expanded_idx += duration
+        
+        return expanded, duration_pred
 
 class Encoder(nn.Module):
     def __init__(self,
@@ -187,7 +168,7 @@ class FastSpeech2(nn.Module):
             dropout=dropout
         )
         
-        self.length_regulator = LengthRegulator(d_model)
+        self.length_regulator = LengthRegulator()
         
         self.decoder = Decoder(
             d_model=d_model,
