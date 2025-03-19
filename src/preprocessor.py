@@ -11,10 +11,11 @@ import sentencepiece as spm
 
 @dataclass
 class TextTokens:
-    """Container for tokenized text with language information"""
-    token_ids: torch.Tensor
-    languages: List[str]  # Language tag for each token
-    attention_mask: Optional[torch.Tensor] = None
+    """Container for processed text tokens"""
+    token_ids: List[int]
+    text: str
+    languages: Optional[List[str]] = None
+    attention_mask: Optional[List[int]] = None
 
 class SwahiliTokenizer:
     """Simple tokenizer for Swahili text"""
