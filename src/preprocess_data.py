@@ -128,8 +128,11 @@ class DataPreprocessor:
 
     def process_example(self, filename: str, metadata: Dict, output_dir: Path):
         """Process a single example"""
+        # Remove .wav extension if present
+        base_filename = filename.replace('.wav', '')
+        
         # Create output directory
-        example_dir = output_dir / filename
+        example_dir = output_dir / base_filename
         example_dir.mkdir(parents=True, exist_ok=True)
         
         # Process audio
@@ -139,10 +142,20 @@ class DataPreprocessor:
         # Process text
         tokens = self.text_processor.process_text(metadata["text"])
         
+        # Calculate duration based on mel spectrogram length and text length
+        mel_length = processed_audio['mel'].size(0)  # Number of mel frames
+        text_length = len(tokens.text)  # Number of characters
+        duration = torch.ones(text_length, dtype=torch.long) * (mel_length // text_length)
+        # Distribute remaining frames
+        remainder = mel_length % text_length
+        if remainder > 0:
+            duration[:remainder] += 1
+        
         # Save processed data
         torch.save(processed_audio['mel'], example_dir / 'mel.pt')
         torch.save(processed_audio['waveform'], example_dir / 'waveform.pt')
-        torch.save(processed_audio['duration'], example_dir / 'duration.pt')
+        torch.save(duration, example_dir / 'duration.pt')
+        torch.save(torch.tensor(tokens.token_ids), example_dir / 'tokens.pt')
         
         # Save metadata
         with open(example_dir / 'metadata.json', 'w', encoding='utf-8') as f:
