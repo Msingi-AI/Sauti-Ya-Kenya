@@ -244,7 +244,7 @@ The model includes special handling for:
 
 ## License 📝
 
-[Insert your chosen license]
+[MIT]
 
 ## Acknowledgments 🙏
 
@@ -255,7 +255,7 @@ The model includes special handling for:
 
 ## Contact 📧
 
-[Add contact information]
+[information.msingiai@gmail.com]
 
 ---
 
