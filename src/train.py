@@ -13,86 +13,71 @@ import torchaudio
 import numpy as np
 from typing import Dict, List, Tuple, Optional
 from tqdm import tqdm
+import pandas as pd
+from torch.nn.utils.rnn import pad_sequence
 
 from .model import FastSpeech2, TTSLoss
 from .preprocessor import TextPreprocessor, SwahiliTokenizer
 
 class TTSDataset(Dataset):
-    def __init__(self, data_dir: str, split: str = 'train'):
+    def __init__(self, data_dir, split='train'):
         self.data_dir = Path(data_dir)
-        self.split_dir = self.data_dir / split
-        self.metadata = self._load_metadata()
-        self.tokenizer = SwahiliTokenizer()
-        self.text_processor = TextPreprocessor(self.tokenizer)
-
-    def _load_metadata(self) -> List[Dict]:
-        metadata = []
-        for speaker_dir in self.split_dir.iterdir():
-            if speaker_dir.is_dir():
-                meta_file = speaker_dir / 'metadata.json'
-                if meta_file.exists():
-                    with open(meta_file, 'r', encoding='utf-8') as f:
-                        speaker_meta = json.load(f)
-                        metadata.append({
-                            'speaker_id': speaker_dir.name,
-                            'text': speaker_meta['text'],
-                            'mel_path': str(speaker_dir / 'mel.pt'),
-                            'duration_path': str(speaker_dir / 'duration.pt')
-                        })
-        return metadata
-
-    def __len__(self) -> int:
-        return len(self.metadata)
-
-    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
-        item = self.metadata[idx]
+        self.split = split
         
-        # Load text
-        text = item['text']
-        tokens = self.text_processor.process_text(text)
+        # Load metadata
+        metadata_file = self.data_dir / f'{split}_metadata.csv'
+        self.metadata = pd.read_csv(metadata_file)
+        
+    def __len__(self):
+        return len(self.metadata)
+    
+    def __getitem__(self, idx):
+        row = self.metadata.iloc[idx]
+        
+        # Load text tokens
+        text_path = self.data_dir / 'text_tokens' / f'{row["id"]}.npy'
+        text = torch.from_numpy(np.load(text_path)).long()
         
         # Load mel spectrogram
-        mel = torch.load(item['mel_path'])
+        mel_path = self.data_dir / 'mel' / f'{row["id"]}.npy'
+        mel = torch.from_numpy(np.load(mel_path)).float()
         
         # Load duration
-        duration = torch.load(item['duration_path'])
+        duration_path = self.data_dir / 'duration' / f'{row["id"]}.npy'
+        duration = torch.from_numpy(np.load(duration_path)).long()
         
-        return {
-            'text': tokens.token_ids,
-            'mel': mel,
-            'duration': duration,
-            'speaker_id': item['speaker_id']
-        }
+        return text, mel, duration
 
-def collate_fn(batch: List[Dict]) -> Dict[str, torch.Tensor]:
-    # Get max lengths
-    max_text_len = max(len(x['text']) for x in batch)
-    max_mel_len = max(x['mel'].size(0) for x in batch)
+def collate_fn(batch):
+    """Create mini-batch tensors from a list of (text, mel, duration) tuples.
+    """
+    # Sort batch by text length
+    batch.sort(key=lambda x: len(x[0]), reverse=True)
     
-    # Initialize tensors
-    text_padded = torch.zeros(len(batch), max_text_len, dtype=torch.long)
-    mel_padded = torch.zeros(len(batch), max_mel_len, 80)
-    duration_padded = torch.zeros(len(batch), max_text_len, dtype=torch.long)
+    # Separate inputs
+    texts, mels, durations = zip(*batch)
     
-    # Fill tensors
-    for i, item in enumerate(batch):
-        text = torch.tensor(item['text'], dtype=torch.long)
-        mel = item['mel']
-        duration = item['duration']
-        
-        text_len = len(text)
-        mel_len = mel.size(0)
-        dur_len = len(duration)
-        
-        text_padded[i, :text_len] = text
-        mel_padded[i, :mel_len] = mel
-        duration_padded[i, :dur_len] = duration
+    # Get lengths
+    text_lengths = [len(x) for x in texts]
+    mel_lengths = [x.size(0) for x in mels]
     
-    return {
-        'text': text_padded,
-        'mel': mel_padded,
-        'duration': duration_padded
-    }
+    # Pad sequences
+    text_padded = pad_sequence(texts, batch_first=True, padding_value=0)
+    mel_padded = pad_sequence(mels, batch_first=True, padding_value=0)
+    duration_padded = pad_sequence(durations, batch_first=True, padding_value=0)
+    
+    return text_padded, mel_padded, duration_padded
+
+def create_dataloader(data_dir, split='train', batch_size=32, num_workers=4, shuffle=True):
+    dataset = TTSDataset(data_dir, split)
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        num_workers=num_workers,
+        collate_fn=collate_fn,
+        pin_memory=True
+    )
 
 class TTSLoss(nn.Module):
     def __init__(self):
@@ -276,27 +261,8 @@ def main():
         print(f"Memory cached: {torch.cuda.memory_reserved() / 1024**3:.1f}GB")
     
     # Initialize datasets
-    train_dataset = TTSDataset('processed_data', split='train')
-    val_dataset = TTSDataset('processed_data', split='val')
-    
-    # Create data loaders with smaller batch size
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=args.batch_size,
-        shuffle=True,
-        collate_fn=collate_fn,
-        num_workers=2 if torch.cuda.is_available() else 0,
-        pin_memory=True if torch.cuda.is_available() else False
-    )
-    
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=args.batch_size,
-        shuffle=False,
-        collate_fn=collate_fn,
-        num_workers=2 if torch.cuda.is_available() else 0,
-        pin_memory=True if torch.cuda.is_available() else False
-    )
+    train_loader = create_dataloader('processed_data', split='train', batch_size=args.batch_size, num_workers=2 if torch.cuda.is_available() else 0)
+    val_loader = create_dataloader('processed_data', split='val', batch_size=args.batch_size, num_workers=2 if torch.cuda.is_available() else 0, shuffle=False)
     
     # Initialize model
     model = FastSpeech2(
