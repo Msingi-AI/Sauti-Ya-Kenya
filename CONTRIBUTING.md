@@ -1,7 +1,7 @@
 # Contributing to Sauti Ya Kenya 🎙️
 
 <div align="center">
-
+ 
 *Help us bring Kenyan Swahili voices to life!* 🇰🇪
 
 </div>
