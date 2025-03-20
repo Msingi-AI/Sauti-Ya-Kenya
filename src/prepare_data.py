@@ -9,6 +9,24 @@ from pathlib import Path
 from tqdm import tqdm
 import torch
 
+def organize_preprocessed_data(data_dir: str):
+    """Create directories for preprocessed features.
+    
+    Args:
+        data_dir: Path to processed data directory
+    """
+    data_dir = Path(data_dir)
+    
+    # Create directories for preprocessed features
+    for split in ['train', 'val']:
+        split_dir = data_dir / split
+        if not split_dir.exists():
+            continue
+            
+        for feature in ['text_tokens', 'mel', 'duration']:
+            feature_dir = split_dir / feature
+            feature_dir.mkdir(exist_ok=True, parents=True)
+            
 def prepare_metadata(data_dir: str):
     """Create metadata files for training and validation sets.
     
@@ -16,6 +34,9 @@ def prepare_metadata(data_dir: str):
         data_dir: Path to processed data directory
     """
     data_dir = Path(data_dir)
+    
+    # First create the feature directories
+    organize_preprocessed_data(data_dir)
     
     # Initialize metadata lists
     train_metadata = []
@@ -28,7 +49,7 @@ def prepare_metadata(data_dir: str):
             continue
             
         # Get all speaker directories
-        speaker_dirs = [d for d in split_dir.iterdir() if d.is_dir()]
+        speaker_dirs = [d for d in split_dir.iterdir() if d.is_dir() and not d.name in ['text_tokens', 'mel', 'duration']]
         for speaker_dir in tqdm(speaker_dirs, desc=f'Processing {split} data'):
             # Get speaker metadata
             meta_file = speaker_dir / 'metadata.json'
@@ -72,31 +93,10 @@ def prepare_metadata(data_dir: str):
         val_df.to_csv(data_dir / 'val_metadata.csv', index=False)
         print(f"Val samples: {len(val_df)}")
 
-def organize_preprocessed_data(data_dir: str):
-    """Organize preprocessed data into subdirectories.
-    
-    Args:
-        data_dir: Path to processed data directory
-    """
-    data_dir = Path(data_dir)
-    
-    # Create directories for preprocessed features
-    for split in ['train', 'val']:
-        split_dir = data_dir / split
-        if not split_dir.exists():
-            continue
-            
-        for feature in ['text_tokens', 'mel', 'duration']:
-            feature_dir = split_dir / feature
-            feature_dir.mkdir(exist_ok=True, parents=True)
-
 def main():
     # Prepare data
     data_dir = 'processed_data'
     print(f"Preparing data in {data_dir}")
-    
-    # Create feature directories
-    organize_preprocessed_data(data_dir)
     
     # Create metadata files and convert features
     prepare_metadata(data_dir)
