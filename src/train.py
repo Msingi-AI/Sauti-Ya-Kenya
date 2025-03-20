@@ -23,6 +23,7 @@ class TTSDataset(Dataset):
     def __init__(self, data_dir, split='train'):
         self.data_dir = Path(data_dir)
         self.split = split
+        self.split_dir = self.data_dir / split
         
         # Load metadata
         metadata_file = self.data_dir / f'{split}_metadata.csv'
@@ -35,15 +36,15 @@ class TTSDataset(Dataset):
         row = self.metadata.iloc[idx]
         
         # Load text tokens
-        text_path = self.data_dir / 'text_tokens' / f'{row["id"]}.npy'
+        text_path = self.split_dir / 'text_tokens' / f'{row["id"]}.npy'
         text = torch.from_numpy(np.load(text_path)).long()
         
         # Load mel spectrogram
-        mel_path = self.data_dir / 'mel' / f'{row["id"]}.npy'
+        mel_path = self.split_dir / 'mel' / f'{row["id"]}.npy'
         mel = torch.from_numpy(np.load(mel_path)).float()
         
         # Load duration
-        duration_path = self.data_dir / 'duration' / f'{row["id"]}.npy'
+        duration_path = self.split_dir / 'duration' / f'{row["id"]}.npy'
         duration = torch.from_numpy(np.load(duration_path)).long()
         
         return text, mel, duration
