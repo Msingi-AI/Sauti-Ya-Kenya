@@ -126,56 +126,42 @@ Read each type naturally, as you would in everyday conversation.
 
 ## Training the Model 🧠
 
-### Local Training
-
-1. Preprocess the data:
-```bash
-python -m src.preprocess_data
-```
-
-2. Start training:
-```bash
-python -m src.train
-```
-
-### Training on Google Colab
+### Training on Google Colab (Recommended)
 
 <a href="https://colab.research.google.com/github/Msingi-AI/Sauti-Ya-Kenya/blob/main/notebooks/sauti_ya_kenya_training.ipynb" target="_blank">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 
-Click the badge above to open our optimized training notebook in Google Colab. The notebook includes:
+We recommend using Google Colab for training as it provides:
+- Free GPU access
+- Optimized memory settings
+- Easy environment setup
+- Automatic checkpoint saving to Google Drive
 
-1. 🔍 Environment Setup
-   - GPU verification
-   - Drive mounting
-   - Repository setup
-   - Memory optimization
-
-2. 📊 Data Management
-   - Automatic data upload/extraction
-   - Preprocessing verification
-   - Directory structure setup
-
-3. 🚀 Training with Memory Optimization
-   - Batch size: 8 (memory-efficient)
+To train the model:
+1. Click the "Open in Colab" button above (opens in new tab)
+2. Connect to a GPU runtime (Runtime → Change runtime type → GPU)
+3. Run the setup cells to mount Drive and install dependencies
+4. Upload your preprocessed data or use our sample dataset
+5. Start training with optimized settings:
+   - Batch size: 8
    - Gradient accumulation: 4 steps
-   - Automatic checkpoint management
-   - GPU memory monitoring
-
-4. 💾 Persistence
-   - Checkpoints saved to Drive
+   - Automatic memory cleanup
    - Progress tracking
-   - Easy resume capability
+   - Checkpoint management
 
-The notebook is designed to run efficiently on Colab's GPU while preventing out-of-memory errors.
+### Local Training (Advanced)
 
-### Resuming Training
-
-To resume from a checkpoint:
+For local training (only recommended if you have a powerful GPU), use:
 ```bash
-python -m src.train --resume path/to/checkpoint.pt
+python -m src.train --batch_size 8 --grad_accum 4
 ```
+
+Note: Local training requires:
+- NVIDIA GPU with 12GB+ VRAM
+- CUDA toolkit
+- All dependencies installed
+- Preprocessed data in the correct format
 
 ## Using the API 🔌
 
