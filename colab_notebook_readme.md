@@ -2,7 +2,7 @@
 
 Click the badge below to open in Colab (opens in new tab):
 
-<a href="https://colab.research.google.com/github/Msingi-AI/Sauti-Ya-Kenya/blob/main/notebooks/sauti_ya_kenya_training.ipynb" target="_blank">
+<a href="https://colab.research.google.com/github/Msingi-AI/Sauti-Ya-Kenya/blob/main/notebooks/train_tts_model.ipynb" target="_blank">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 
@@ -20,9 +20,13 @@ This notebook provides GPU-accelerated training for the Sauti Ya Kenya TTS model
 - Reduced batch size (8) for efficient memory usage
 - Gradient accumulation (4 steps)
 - Automatic CUDA cache cleanup
-- GPU memory monitoring
-- Optimized PyTorch settings
+- Memory allocation monitoring
+- Checkpoint management in Drive
 
-## Need Help?
+## Getting Started
 
-Contact us at [information.msingiai@gmail.com](mailto:information.msingiai@gmail.com)
+1. Upload `data.zip` to `/content/drive/MyDrive/Sauti-Ya-Kenya/`
+2. Click the Colab badge above (opens in new tab)
+3. Connect to GPU runtime (Runtime → Change runtime type → GPU)
+4. Run cells in order
+5. Monitor training progress in the output
