@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-orange.svg)](https://pytorch.org/)
-<a href="https://colab.research.google.com/github/Msingi-AI/Sauti-Ya-Kenya/blob/main/notebooks/sauti_ya_kenya_training.ipynb" target="_blank">
+<a href="https://colab.research.google.com/github/Msingi-AI/Sauti-Ya-Kenya/blob/main/notebooks/train_tts_model.ipynb" target="_blank">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 
@@ -128,7 +128,7 @@ Read each type naturally, as you would in everyday conversation.
 
 ### Training on Google Colab (Recommended)
 
-<a href="https://colab.research.google.com/github/Msingi-AI/Sauti-Ya-Kenya/blob/main/notebooks/sauti_ya_kenya_training.ipynb" target="_blank">
+<a href="https://colab.research.google.com/github/Msingi-AI/Sauti-Ya-Kenya/blob/main/notebooks/train_tts_model.ipynb" target="_blank">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 
@@ -250,7 +250,7 @@ Sauti-Ya-Kenya/
 ├── data/                     # Raw audio recordings and metadata
 ├── processed_data/           # Preprocessed training data
 ├── notebooks/               # Jupyter notebooks
-│   └── sauti_ya_kenya_training.ipynb  # Optimized Colab training notebook
+│   └── train_tts_model.ipynb  # Optimized Colab training notebook
 ├── src/
 │   ├── data_collection.py   # GUI tool for recording
 │   ├── preprocess_data.py   # Data preprocessing pipeline
