@@ -163,6 +163,27 @@ Note: Local training requires:
 - All dependencies installed
 - Preprocessed data in the correct format
 
+## Training Parameters
+
+The training script accepts the following parameters:
+```bash
+python -m src.train \
+    --batch_size 8 \          # Batch size for training
+    --grad_accum 4 \          # Number of gradient accumulation steps
+    --epochs 100 \            # Total number of training epochs
+    --save_every 10 \         # Save checkpoint every N epochs
+    --checkpoint_dir checkpoints  # Directory to save checkpoints
+    --resume path/to/checkpoint.pt  # Optional: Resume from checkpoint
+```
+
+### Memory Optimization
+The training is optimized for efficient GPU memory usage with:
+- Reduced batch size (8)
+- Gradient accumulation (4 steps)
+- Automatic CUDA cache cleanup
+- Memory monitoring
+- OneCycleLR scheduler with cosine annealing
+
 ## Using the API 🔌
 
 ### Quick Start

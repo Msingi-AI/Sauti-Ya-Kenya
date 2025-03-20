@@ -245,6 +245,9 @@ def main():
     parser.add_argument('--resume', type=str, help='Path to checkpoint to resume from')
     parser.add_argument('--batch_size', type=int, default=8, help='Batch size')
     parser.add_argument('--grad_accum', type=int, default=4, help='Gradient accumulation steps')
+    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train')
+    parser.add_argument('--save_every', type=int, default=10, help='Save checkpoint every N epochs')
+    parser.add_argument('--checkpoint_dir', type=str, default='checkpoints', help='Directory to save checkpoints')
     args = parser.parse_args()
     
     # Set memory optimization
@@ -281,10 +284,16 @@ def main():
     scheduler = OneCycleLR(
         optimizer,
         max_lr=0.001,
-        epochs=100,
+        epochs=args.epochs,
         steps_per_epoch=len(train_loader) // args.grad_accum,
         pct_start=0.1,
-        anneal_strategy='cos'
+        anneal_strategy='cos',
+        cycle_momentum=True,
+        base_momentum=0.85,
+        max_momentum=0.95,
+        div_factor=25.0,
+        final_div_factor=1e4,
+        three_phase=False
     )
     
     # Initialize trainer
@@ -294,12 +303,12 @@ def main():
         val_loader=val_loader,
         optimizer=optimizer,
         device=device,
-        checkpoint_dir='checkpoints',
+        checkpoint_dir=args.checkpoint_dir,
         grad_accum_steps=args.grad_accum
     )
     
     # Train model
-    trainer.train(num_epochs=100, resume_from=args.resume)
+    trainer.train(num_epochs=args.epochs, resume_from=args.resume)
 
 if __name__ == '__main__':
     main()
