@@ -17,8 +17,13 @@ class PositionalEncoding(nn.Module):
         pe[:, 1::2] = torch.cos(position * div_term)
         pe = pe.unsqueeze(0)
         self.register_buffer('pe', pe)
+        self.max_len = max_len
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        seq_len = x.size(1)
+        if seq_len > self.max_len:
+            print(f"Warning: Input sequence length {seq_len} exceeds maximum length {self.max_len}. Truncating.")
+            x = x[:, :self.max_len]
         return x + self.pe[:, :x.size(1)]
 
 class FFTBlock(nn.Module):
@@ -53,46 +58,40 @@ class FFTBlock(nn.Module):
         return x
 
 class LengthRegulator(nn.Module):
-    def __init__(self):
+    def __init__(self, max_len: int = 10000):
         super().__init__()
         self.length_layer = nn.Linear(384, 1)  # d_model -> 1
+        self.max_len = max_len
         
-    def forward(self, x, duration_target=None):
-        """Expand encoder output according to predicted or target duration.
+    def forward(self, x: torch.Tensor, duration_target: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+        # Predict duration if not provided
+        log_duration_pred = self.length_layer(x)
+        duration_pred = torch.exp(log_duration_pred) - 1
         
-        Args:
-            x (Tensor): Encoder output [B, T, C]
-            duration_target (Tensor, optional): Target duration for training [B, T]
-            
-        Returns:
-            Tensor: Expanded features [B, T', C]
-            Tensor: Duration predictions [B, T]
-        """
-        duration_pred = self.length_layer(x).squeeze(-1)  # [B, T]
-        
-        if duration_target is not None:
-            duration_rounded = duration_target
+        if duration_target is None:
+            duration_rounded = torch.round(duration_pred)
         else:
-            duration_rounded = torch.clamp(torch.round(torch.exp(duration_pred)), min=1)
-        
-        # Calculate expanded sequence lengths
-        expand_length = torch.sum(duration_rounded, dim=1).long()  # [B]
-        max_length = expand_length.max()
-        
-        # Initialize output tensor
-        batch_size, _, channels = x.size()
-        expanded = x.new_zeros((batch_size, max_length, channels))
-        
-        # Expand each batch item
-        for i in range(batch_size):
-            expanded_idx = 0
-            for j, duration in enumerate(duration_rounded[i]):
-                duration = int(duration.item())
-                if duration > 0:  # Only expand if duration > 0
-                    expanded[i, expanded_idx:expanded_idx + duration] = x[i, j].unsqueeze(0).expand(duration, -1)
-                    expanded_idx += duration
-        
-        return expanded, duration_pred
+            duration_rounded = duration_target
+            
+        # Calculate total expanded length
+        expanded_len = int(duration_rounded.sum().item())
+        if expanded_len > self.max_len:
+            # Scale down durations to fit max_len
+            scale_factor = self.max_len / expanded_len
+            duration_rounded = torch.floor(duration_rounded * scale_factor)
+            print(f"Warning: Expanded length {expanded_len} exceeds maximum length {self.max_len}. Scaling durations.")
+            expanded_len = int(duration_rounded.sum().item())
+            
+        # Expand according to duration
+        expanded = torch.zeros(x.size(0), expanded_len, x.size(2)).to(x.device)
+        current_pos = 0
+        for i in range(x.size(1)):
+            expanded_size = int(duration_rounded[:, i].sum().item())
+            if expanded_size > 0:
+                expanded[:, current_pos:current_pos + expanded_size] = x[:, i:i+1].expand(-1, expanded_size, -1)
+                current_pos += expanded_size
+                
+        return expanded, duration_pred.squeeze(-1)
 
 class Encoder(nn.Module):
     def __init__(self,
@@ -101,10 +100,11 @@ class Encoder(nn.Module):
                  n_layers: int,
                  n_head: int,
                  d_ff: int,
-                 dropout: float = 0.1):
+                 dropout: float = 0.1,
+                 max_len: int = 10000):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, d_model)
-        self.pos_encoder = PositionalEncoding(d_model)
+        self.pos_encoder = PositionalEncoding(d_model, max_len=max_len)
         self.layers = nn.ModuleList([
             FFTBlock(d_model, n_head, d_ff, dropout)
             for _ in range(n_layers)
@@ -112,13 +112,20 @@ class Encoder(nn.Module):
         self.norm = nn.LayerNorm(d_model)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Embed tokens
         x = self.embedding(x)
+        
+        # Add positional encoding
         x = self.pos_encoder(x)
         
+        # Apply transformer blocks
         for layer in self.layers:
             x = layer(x)
             
-        return self.norm(x)
+        # Final layer norm
+        x = self.norm(x)
+        
+        return x
 
 class Decoder(nn.Module):
     def __init__(self,
@@ -127,9 +134,10 @@ class Decoder(nn.Module):
                  n_head: int,
                  d_ff: int,
                  n_mels: int,
-                 dropout: float = 0.1):
+                 dropout: float = 0.1,
+                 max_len: int = 10000):
         super().__init__()
-        self.pos_encoder = PositionalEncoding(d_model)
+        self.pos_encoder = PositionalEncoding(d_model, max_len=max_len)
         self.layers = nn.ModuleList([
             FFTBlock(d_model, n_head, d_ff, dropout)
             for _ in range(n_layers)
@@ -156,7 +164,8 @@ class FastSpeech2(nn.Module):
                  n_heads: int = 2,
                  d_ff: int = 1536,
                  n_mels: int = 80,
-                 dropout: float = 0.1):
+                 dropout: float = 0.1,
+                 max_len: int = 10000):
         super().__init__()
         
         self.encoder = Encoder(
@@ -165,10 +174,11 @@ class FastSpeech2(nn.Module):
             n_layers=n_enc_layers,
             n_head=n_heads,
             d_ff=d_ff,
-            dropout=dropout
+            dropout=dropout,
+            max_len=max_len
         )
         
-        self.length_regulator = LengthRegulator()
+        self.length_regulator = LengthRegulator(max_len=max_len)
         
         self.decoder = Decoder(
             d_model=d_model,
@@ -176,26 +186,20 @@ class FastSpeech2(nn.Module):
             n_head=n_heads,
             d_ff=d_ff,
             n_mels=n_mels,
-            dropout=dropout
+            dropout=dropout,
+            max_len=max_len
         )
 
     def forward(self,
                 src: torch.Tensor,
-                src_mask: Optional[torch.Tensor] = None,
                 duration_target: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
-        # Create padding mask
-        src_pad_mask = (src != 0).unsqueeze(-2)  # [batch, 1, time]
-        
-        # Encode
+        # Encode input sequence
         encoder_output = self.encoder(src)
         
         # Length regulation
-        length_regulated, duration_pred = self.length_regulator(
-            encoder_output,
-            duration_target
-        )
+        length_regulated, duration_pred = self.length_regulator(encoder_output, duration_target)
         
-        # Decode
+        # Decode to generate mel spectrogram
         mel_output = self.decoder(length_regulated)
         
         return mel_output, duration_pred
