@@ -1,252 +1,153 @@
 """
-Evaluation metrics for TTS model
+Evaluation metrics for the TTS model.
 """
 import torch
-import torch.nn.functional as F
 import numpy as np
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
+import torchaudio
 from pesq import pesq
-from pystoi import stoi
-import librosa
+from torch.nn import functional as F
 
-class TTSEvaluator:
-    """Evaluator for TTS model performance"""
-    def __init__(self, sample_rate: int = 22050):
-        self.sample_rate = sample_rate
-        
-    def compute_mel_cepstral_distortion(self,
-                                      predicted: torch.Tensor,
-                                      target: torch.Tensor) -> float:
-        """
-        Compute Mel Cepstral Distortion (MCD)
-        Args:
-            predicted: Predicted mel-spectrogram
-            target: Target mel-spectrogram
-        Returns:
-            MCD score (lower is better)
-        """
-        # Convert to log scale
-        predicted_db = torch.log10(torch.clamp(predicted, min=1e-5))
-        target_db = torch.log10(torch.clamp(target, min=1e-5))
-        
-        # Compute MCD
-        diff = predicted_db - target_db
-        mcd = torch.sqrt(torch.mean(diff ** 2, dim=-1))
-        return mcd.mean().item()
+def compute_mel_cepstral_distortion(predicted: torch.Tensor, target: torch.Tensor) -> float:
+    """Compute Mel Cepstral Distortion between predicted and target spectrograms.
     
-    def compute_pesq(self,
-                    predicted: torch.Tensor,
-                    target: torch.Tensor) -> float:
-        """
-        Compute Perceptual Evaluation of Speech Quality (PESQ)
-        Args:
-            predicted: Predicted audio waveform
-            target: Target audio waveform
-        Returns:
-            PESQ score (higher is better)
-        """
-        # Convert to numpy and reshape
-        predicted = predicted.cpu().numpy().squeeze()
-        target = target.cpu().numpy().squeeze()
-        
-        # Ensure same length
-        min_len = min(len(predicted), len(target))
-        predicted = predicted[:min_len]
-        target = target[:min_len]
-        
-        # Compute PESQ
+    Args:
+        predicted: Predicted mel spectrogram [B, T, n_mels]
+        target: Target mel spectrogram [B, T, n_mels]
+    
+    Returns:
+        float: MCD score (lower is better)
+    """
+    # Convert to log scale
+    predicted = torch.log10(torch.clamp(predicted, min=1e-5))
+    target = torch.log10(torch.clamp(target, min=1e-5))
+    
+    # Compute MCD
+    diff = predicted - target
+    mcd = torch.sqrt(torch.mean(diff * diff, dim=-1))
+    return mcd.mean().item()
+
+def compute_pesq_score(predicted_wav: torch.Tensor, target_wav: torch.Tensor, sr: int = 22050) -> float:
+    """Compute PESQ score between predicted and target waveforms.
+    
+    Args:
+        predicted_wav: Predicted waveform [B, T]
+        target_wav: Target waveform [B, T]
+        sr: Sample rate
+    
+    Returns:
+        float: PESQ score (higher is better)
+    """
+    # Convert to numpy
+    pred_np = predicted_wav.cpu().numpy()
+    target_np = target_wav.cpu().numpy()
+    
+    # Compute PESQ for each sample
+    scores = []
+    for p, t in zip(pred_np, target_np):
         try:
-            score = pesq(self.sample_rate, target, predicted, 'wb')
+            score = pesq(sr, t, p, 'wb')
+            scores.append(score)
         except:
-            score = float('nan')
-        
-        return score
+            continue
     
-    def compute_stoi(self,
-                    predicted: torch.Tensor,
-                    target: torch.Tensor) -> float:
-        """
-        Compute Short-Time Objective Intelligibility (STOI)
-        Args:
-            predicted: Predicted audio waveform
-            target: Target audio waveform
-        Returns:
-            STOI score (higher is better)
-        """
-        # Convert to numpy and reshape
-        predicted = predicted.cpu().numpy().squeeze()
-        target = target.cpu().numpy().squeeze()
-        
-        # Ensure same length
-        min_len = min(len(predicted), len(target))
-        predicted = predicted[:min_len]
-        target = target[:min_len]
-        
-        # Compute STOI
-        try:
-            score = stoi(target, predicted, self.sample_rate, extended=False)
-        except:
-            score = float('nan')
-        
-        return score
+    return np.mean(scores) if scores else 0.0
+
+def evaluate_model(model: torch.nn.Module, 
+                  val_loader: torch.utils.data.DataLoader,
+                  vocoder: torch.nn.Module = None) -> Dict[str, float]:
+    """Evaluate model on validation set.
     
-    def compute_pitch_accuracy(self,
-                             predicted: torch.Tensor,
-                             target: torch.Tensor) -> float:
-        """
-        Compute pitch accuracy between predicted and target audio
-        Args:
-            predicted: Predicted audio waveform
-            target: Target audio waveform
-        Returns:
-            Pitch accuracy score (higher is better)
-        """
-        # Convert to numpy
-        predicted = predicted.cpu().numpy().squeeze()
-        target = target.cpu().numpy().squeeze()
-        
-        # Extract pitch
-        f0_predicted, voiced_flag_predicted = librosa.pyin(
-            predicted,
-            fmin=librosa.note_to_hz('C2'),
-            fmax=librosa.note_to_hz('C7'),
-            sr=self.sample_rate
-        )
-        
-        f0_target, voiced_flag_target = librosa.pyin(
-            target,
-            fmin=librosa.note_to_hz('C2'),
-            fmax=librosa.note_to_hz('C7'),
-            sr=self.sample_rate
-        )
-        
-        # Compute accuracy only for voiced frames
-        voiced_mask = voiced_flag_predicted & voiced_flag_target
-        if not np.any(voiced_mask):
-            return float('nan')
+    Args:
+        model: TTS model
+        val_loader: Validation data loader
+        vocoder: Optional vocoder model for waveform reconstruction
+    
+    Returns:
+        dict: Dictionary of evaluation metrics
+    """
+    model.eval()
+    metrics = {
+        'mel_loss': 0.0,
+        'duration_loss': 0.0,
+        'mcd': 0.0,
+        'pesq': 0.0
+    }
+    
+    n_batches = 0
+    
+    with torch.no_grad():
+        for batch in val_loader:
+            text, mel_target, duration_target = batch
             
-        f0_predicted = f0_predicted[voiced_mask]
-        f0_target = f0_target[voiced_mask]
-        
-        # Convert to cents for comparison
-        cents_predicted = 1200 * np.log2(f0_predicted / 440.0)
-        cents_target = 1200 * np.log2(f0_target / 440.0)
-        
-        # Consider a pitch correct if within 50 cents
-        correct = np.abs(cents_predicted - cents_target) < 50
-        return np.mean(correct)
+            # Move to device
+            text = text.to(next(model.parameters()).device)
+            mel_target = mel_target.to(next(model.parameters()).device)
+            duration_target = duration_target.to(next(model.parameters()).device)
+            
+            # Forward pass
+            mel_output, duration_pred = model(text, duration_target)
+            
+            # Compute losses
+            mel_loss = F.l1_loss(mel_output, mel_target)
+            duration_loss = F.mse_loss(duration_pred.float(), duration_target.float())
+            
+            # Compute MCD
+            mcd = compute_mel_cepstral_distortion(mel_output, mel_target)
+            
+            # Compute PESQ if vocoder is available
+            pesq_score = 0.0
+            if vocoder is not None:
+                wav_pred = vocoder(mel_output)
+                wav_target = vocoder(mel_target)
+                pesq_score = compute_pesq_score(wav_pred, wav_target)
+            
+            # Update metrics
+            metrics['mel_loss'] += mel_loss.item()
+            metrics['duration_loss'] += duration_loss.item()
+            metrics['mcd'] += mcd
+            metrics['pesq'] += pesq_score
+            
+            n_batches += 1
     
-    def compute_duration_accuracy(self,
-                                predicted_durations: torch.Tensor,
-                                target_durations: torch.Tensor) -> float:
-        """
-        Compute duration prediction accuracy
-        Args:
-            predicted_durations: Predicted phoneme durations
-            target_durations: Target phoneme durations
-        Returns:
-            Duration accuracy score (higher is better)
-        """
-        # Convert to frames
-        pred_frames = predicted_durations.round().long()
-        target_frames = target_durations.round().long()
+    # Average metrics
+    for k in metrics:
+        metrics[k] /= n_batches
         
-        # Compute accuracy with 20% tolerance
-        tolerance = target_frames * 0.2
-        correct = torch.abs(pred_frames - target_frames) <= tolerance
-        return correct.float().mean().item()
+    return metrics
+
+if __name__ == '__main__':
+    import argparse
+    from torch.utils.data import DataLoader
+    from model import FastSpeech2
+    from train import TTSDataset, collate_fn
     
-    def evaluate_batch(self,
-                      predicted_audio: torch.Tensor,
-                      target_audio: torch.Tensor,
-                      predicted_mel: torch.Tensor,
-                      target_mel: torch.Tensor,
-                      predicted_durations: torch.Tensor,
-                      target_durations: torch.Tensor) -> Dict[str, float]:
-        """
-        Compute all evaluation metrics for a batch
-        Args:
-            predicted_audio: Predicted audio waveforms
-            target_audio: Target audio waveforms
-            predicted_mel: Predicted mel-spectrograms
-            target_mel: Target mel-spectrograms
-            predicted_durations: Predicted phoneme durations
-            target_durations: Target phoneme durations
-        Returns:
-            Dictionary of evaluation metrics
-        """
-        metrics = {}
-        
-        # Compute MCD
-        metrics['mcd'] = self.compute_mel_cepstral_distortion(
-            predicted_mel, target_mel
-        )
-        
-        # Compute PESQ and STOI for each sample
-        pesq_scores = []
-        stoi_scores = []
-        pitch_scores = []
-        
-        for pred, tgt in zip(predicted_audio, target_audio):
-            pesq_scores.append(self.compute_pesq(pred, tgt))
-            stoi_scores.append(self.compute_stoi(pred, tgt))
-            pitch_scores.append(self.compute_pitch_accuracy(pred, tgt))
-        
-        metrics['pesq'] = np.nanmean(pesq_scores)
-        metrics['stoi'] = np.nanmean(stoi_scores)
-        metrics['pitch_accuracy'] = np.nanmean(pitch_scores)
-        
-        # Compute duration accuracy
-        metrics['duration_accuracy'] = self.compute_duration_accuracy(
-            predicted_durations, target_durations
-        )
-        
-        return metrics
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--checkpoint', type=str, required=True, help='Path to model checkpoint')
+    parser.add_argument('--data_dir', type=str, default='processed_data', help='Data directory')
+    parser.add_argument('--batch_size', type=int, default=8, help='Batch size')
+    args = parser.parse_args()
     
-    def evaluate_model(self,
-                      model,
-                      eval_loader,
-                      device: str = "cuda") -> Dict[str, float]:
-        """
-        Evaluate model on evaluation dataset
-        Args:
-            model: TTS model
-            eval_loader: Evaluation data loader
-            device: Device to run evaluation on
-        Returns:
-            Dictionary of evaluation metrics
-        """
-        model.eval()
-        all_metrics = []
-        
-        with torch.no_grad():
-            for batch in eval_loader:
-                # Move batch to device
-                text_ids = batch['text_ids'].to(device)
-                target_mel = batch['mel'].to(device)
-                target_audio = batch['audio'].to(device)
-                target_durations = batch['durations'].to(device)
-                
-                # Generate speech
-                predicted_mel, predicted_durations = model(text_ids)
-                predicted_audio = model.vocoder(predicted_mel)
-                
-                # Compute metrics
-                metrics = self.evaluate_batch(
-                    predicted_audio,
-                    target_audio,
-                    predicted_mel,
-                    target_mel,
-                    predicted_durations,
-                    target_durations
-                )
-                
-                all_metrics.append(metrics)
-        
-        # Average metrics
-        final_metrics = {}
-        for key in all_metrics[0].keys():
-            values = [m[key] for m in all_metrics]
-            final_metrics[key] = np.nanmean(values)
-        
-        return final_metrics
+    # Load model
+    checkpoint = torch.load(args.checkpoint)
+    model = FastSpeech2(**checkpoint['model_config'])
+    model.load_state_dict(checkpoint['model'])
+    model.eval()
+    
+    # Create validation dataset
+    val_dataset = TTSDataset(args.data_dir, split='val')
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=args.batch_size,
+        collate_fn=collate_fn,
+        shuffle=False
+    )
+    
+    # Evaluate
+    metrics = evaluate_model(model, val_loader)
+    
+    # Print results
+    print("\nEvaluation Results:")
+    print("-" * 20)
+    for k, v in metrics.items():
+        print(f"{k}: {v:.4f}")
