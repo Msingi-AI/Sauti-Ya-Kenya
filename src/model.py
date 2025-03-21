@@ -20,11 +20,17 @@ class PositionalEncoding(nn.Module):
         self.max_len = max_len
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        print(f"\nPositionalEncoding input shape: {x.shape}")
+        print(f"pe shape: {self.pe.shape}")
+        
         seq_len = x.size(1)
         if seq_len > self.max_len:
             print(f"Warning: Input sequence length {seq_len} exceeds maximum length {self.max_len}. Truncating.")
             x = x[:, :self.max_len]
-        return x + self.pe[:, :x.size(1)]
+            
+        output = x + self.pe[:, :x.size(1)]
+        print(f"PositionalEncoding output shape: {output.shape}")
+        return output
 
 class FFTBlock(nn.Module):
     def __init__(self, d_model: int, n_head: int, d_ff: int, dropout: float = 0.1):
@@ -41,10 +47,14 @@ class FFTBlock(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        print(f"\nFFTBlock input shape: {x.shape}")
+        
         # Self attention
         residual = x
         x = self.norm1(x)
+        x = x.transpose(0, 1)  # [B, T, D] -> [T, B, D] for attention
         x, _ = self.self_attn(x, x, x)
+        x = x.transpose(0, 1)  # [T, B, D] -> [B, T, D]
         x = self.dropout(x)
         x = residual + x
 
@@ -54,7 +64,8 @@ class FFTBlock(nn.Module):
         x = self.ff(x)
         x = self.dropout(x)
         x = residual + x
-
+        
+        print(f"FFTBlock output shape: {x.shape}")
         return x
 
 class LengthRegulator(nn.Module):
@@ -64,6 +75,11 @@ class LengthRegulator(nn.Module):
         self.max_len = max_len
         
     def forward(self, x: torch.Tensor, duration_target: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+        print(f"\nLengthRegulator input shapes:")
+        print(f"x: {x.shape}")
+        if duration_target is not None:
+            print(f"duration_target: {duration_target.shape}")
+        
         # Predict duration if not provided
         log_duration_pred = self.length_layer(x)
         duration_pred = torch.exp(log_duration_pred) - 1
@@ -90,6 +106,10 @@ class LengthRegulator(nn.Module):
             if expanded_size > 0:
                 expanded[:, current_pos:current_pos + expanded_size] = x[:, i:i+1].expand(-1, expanded_size, -1)
                 current_pos += expanded_size
+        
+        print(f"\nLengthRegulator output shapes:")
+        print(f"expanded: {expanded.shape}")
+        print(f"duration_pred: {duration_pred.squeeze(-1).shape}")
                 
         return expanded, duration_pred.squeeze(-1)
 
@@ -112,19 +132,22 @@ class Encoder(nn.Module):
         self.norm = nn.LayerNorm(d_model)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        print(f"\nEncoder input shape: {x.shape}")
+        
         # Embed tokens
         x = self.embedding(x)
+        print(f"After embedding shape: {x.shape}")
         
         # Add positional encoding
         x = self.pos_encoder(x)
+        print(f"After positional encoding shape: {x.shape}")
         
-        # Apply transformer blocks
+        # Apply transformer layers
         for layer in self.layers:
             x = layer(x)
             
-        # Final layer norm
         x = self.norm(x)
-        
+        print(f"Encoder output shape: {x.shape}")
         return x
 
 class Decoder(nn.Module):
@@ -146,13 +169,19 @@ class Decoder(nn.Module):
         self.mel_linear = nn.Linear(d_model, n_mels)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        print(f"\nDecoder input shape: {x.shape}")
+        
         x = self.pos_encoder(x)
+        print(f"After positional encoding shape: {x.shape}")
         
         for layer in self.layers:
             x = layer(x)
             
         x = self.norm(x)
+        print(f"After final norm shape: {x.shape}")
+        
         mel_output = self.mel_linear(x)
+        print(f"Final mel output shape: {mel_output.shape}")
         return mel_output
 
 class FastSpeech2(nn.Module):
@@ -193,14 +222,24 @@ class FastSpeech2(nn.Module):
     def forward(self,
                 src: torch.Tensor,
                 duration_target: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+        print("\nFastSpeech2 input shapes:")
+        print(f"src: {src.shape}")
+        if duration_target is not None:
+            print(f"duration_target: {duration_target.shape}")
+        
         # Encode input sequence
         encoder_output = self.encoder(src)
+        print(f"\nEncoder output shape: {encoder_output.shape}")
         
         # Length regulation
         length_regulated, duration_pred = self.length_regulator(encoder_output, duration_target)
+        print(f"\nAfter length regulation shapes:")
+        print(f"length_regulated: {length_regulated.shape}")
+        print(f"duration_pred: {duration_pred.shape}")
         
         # Decode to generate mel spectrogram
         mel_output = self.decoder(length_regulated)
+        print(f"\nDecoder output shape: {mel_output.shape}")
         
         return mel_output, duration_pred
 
