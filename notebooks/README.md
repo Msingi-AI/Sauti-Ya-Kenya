@@ -2,7 +2,7 @@
 
 ## Tokenizer Training
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Msingi-AI/Sauti-Ya-Kenya/blob/main/notebooks/train_tokenizer_v2.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Msingi-AI/Sauti-Ya-Kenya/blob/main/notebooks/train_tokenizer_v3.ipynb)
 
 This notebook trains the Swahili tokenizer with code-switching support using Colab's free GPU.
 
