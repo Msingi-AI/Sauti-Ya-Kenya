@@ -9,8 +9,7 @@
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 
-<img src="![msingi-small-logo](https://github.com/user-attachments/assets/8e2e3e53-5478-4e0b-817e-236e43b37d53)
-" alt="Sauti Ya Kenya Logo" width="200"/>
+![image](https://github.com/user-attachments/assets/93e891f3-5828-4cee-8f78-016d98fa1ff2)
 
 *Bringing Kenyan Swahili voices to life through AI* 🇰🇪
 
