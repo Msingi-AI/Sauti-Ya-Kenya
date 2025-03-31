@@ -5,15 +5,11 @@ import argparse
 import glob
 import logging
 import os
-import sys
 from typing import List
 from tqdm import tqdm
 
-# Add src directory to path for imports
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from src.preprocessor import SwahiliTokenizer, TextPreprocessor
-from src.config import ModelConfig
+from .preprocessor import SwahiliTokenizer, TextPreprocessor
+from .config import ModelConfig
 
 def load_text_files(data_dir: str, extensions: List[str] = ['.txt']) -> List[str]:
     """Load text data from files"""
