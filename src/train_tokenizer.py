@@ -79,12 +79,12 @@ def main():
         "Tutaonana kesho asubuhi.",
     ]
     
-    preprocessor = TextPreprocessor(tokenizer)
     for text in test_texts:
-        tokens = preprocessor.process_text(text)
+        tokens = tokenizer.encode(text)
+        decoded = tokenizer.decode(tokens)
         logging.info(f"\nInput: {text}")
-        logging.info(f"Tokens: {tokens.token_ids.tolist()}")
-        logging.info(f"Languages: {tokens.languages}")
+        logging.info(f"Tokens: {tokens}")
+        logging.info(f"Decoded: {decoded}")
     
     logging.info("Training complete! Tokenizer saved to: " + model_path + ".model")
 
