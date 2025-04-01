@@ -26,15 +26,33 @@ class TTSDataset(Dataset):
         self.split_dir = self.data_dir
         
         # Load metadata
-        metadata_file = self.data_dir / 'metadata.csv'  
+        metadata_file = self.data_dir / 'metadata.csv'
         self.metadata = pd.read_csv(metadata_file)
+        
+        # Filter out rows where files don't exist
+        valid_rows = []
+        for idx, row in self.metadata.iterrows():
+            speaker_id = row['speaker_id']
+            clip_id = row['clip_id']
+            
+            # Check if required files exist
+            text_file = self.split_dir / speaker_id / f'{clip_id}_text.txt'
+            mel_file = self.split_dir / speaker_id / f'{clip_id}_mel.pt'
+            
+            if text_file.exists() and mel_file.exists():
+                valid_rows.append(idx)
+        
+        self.metadata = self.metadata.iloc[valid_rows].reset_index(drop=True)
+        print(f"Found {len(self.metadata)} valid samples with all required files")
         
         # Split data if needed
         if split == 'train':
-            self.metadata = self.metadata.iloc[:int(len(self.metadata) * 0.9)]  
-        else:  
-            self.metadata = self.metadata.iloc[int(len(self.metadata) * 0.9):]  
-
+            self.metadata = self.metadata.iloc[:int(len(self.metadata) * 0.9)]
+        else:  # val
+            self.metadata = self.metadata.iloc[int(len(self.metadata) * 0.9):]
+        
+        print(f"{split.capitalize()} set size: {len(self.metadata)}")
+    
     def __len__(self):
         return len(self.metadata)
     
@@ -43,7 +61,7 @@ class TTSDataset(Dataset):
         speaker_id = row['speaker_id']
         clip_id = row['clip_id']
         
-        # Load text tokens (need to convert text to tokens first)
+        # Load text tokens
         text_file = self.split_dir / speaker_id / f'{clip_id}_text.txt'
         with open(text_file, 'r') as f:
             text = torch.tensor([int(t) for t in f.read().strip().split()]).long()
