@@ -25,11 +25,11 @@ class TTSDataset(Dataset):
         self.data_dir = Path(data_dir)
         self.split = split
         
-        print(f"\nInitializing dataset from: {self.data_dir}")
+        print(f"\nInitializing dataset from: {self.data_dir} (exists: {self.data_dir.exists()})")
         
         # Load metadata
         metadata_file = self.data_dir / 'metadata.csv'
-        print(f"Looking for metadata at: {metadata_file}")
+        print(f"Looking for metadata at: {metadata_file} (exists: {metadata_file.exists()})")
         if not metadata_file.exists():
             raise FileNotFoundError(f"Metadata file not found at {metadata_file}")
             
@@ -42,16 +42,14 @@ class TTSDataset(Dataset):
             speaker_id = row['speaker_id']
             clip_id = row['clip_id']
             
-            # Create speaker directory if it doesn't exist
-            speaker_dir = self.data_dir / speaker_id
-            speaker_dir.mkdir(parents=True, exist_ok=True)
-            
             # Check if required files exist
+            speaker_dir = self.data_dir / speaker_id
             text_file = speaker_dir / f'{clip_id}_text.txt'
             wav_file = speaker_dir / f'{clip_id}.wav'
             mel_file = speaker_dir / f'{clip_id}_mel.pt'
             
             print(f"\nChecking files for {speaker_id}/{clip_id}:")
+            print(f"Speaker dir: {speaker_dir} (exists: {speaker_dir.exists()})")
             print(f"Text file: {text_file} (exists: {text_file.exists()})")
             print(f"WAV file: {wav_file} (exists: {wav_file.exists()})")
             print(f"Mel file: {mel_file} (exists: {mel_file.exists()})")
@@ -61,6 +59,12 @@ class TTSDataset(Dataset):
                 print(" Found all required files")
             else:
                 print(" Missing required files")
+                
+            # List contents of speaker dir if it exists
+            if speaker_dir.exists():
+                print("Contents of speaker directory:")
+                for f in speaker_dir.iterdir():
+                    print(f"  - {f.name}")
         
         if not valid_rows:
             raise RuntimeError(
