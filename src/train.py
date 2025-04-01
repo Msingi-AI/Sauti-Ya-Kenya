@@ -42,10 +42,14 @@ class TTSDataset(Dataset):
             speaker_id = row['speaker_id']
             clip_id = row['clip_id']
             
+            # Create speaker directory if it doesn't exist
+            speaker_dir = self.data_dir / speaker_id
+            speaker_dir.mkdir(parents=True, exist_ok=True)
+            
             # Check if required files exist
-            text_file = self.data_dir / speaker_id / f'{clip_id}_text.txt'
-            wav_file = self.data_dir / speaker_id / f'{clip_id}.wav'
-            mel_file = self.data_dir / speaker_id / f'{clip_id}_mel.pt'
+            text_file = speaker_dir / f'{clip_id}_text.txt'
+            wav_file = speaker_dir / f'{clip_id}.wav'
+            mel_file = speaker_dir / f'{clip_id}_mel.pt'
             
             print(f"\nChecking files for {speaker_id}/{clip_id}:")
             print(f"Text file: {text_file} (exists: {text_file.exists()})")
@@ -60,11 +64,10 @@ class TTSDataset(Dataset):
         
         if not valid_rows:
             raise RuntimeError(
-                f"No valid samples found in {data_dir}. "
-                f"Each speaker directory should contain:\n"
-                f"1. {clip_id}_text.txt - text tokens\n"
-                f"2. {clip_id}.wav - audio file\n"
-                f"3. {clip_id}_mel.pt - mel spectrogram"
+                f"No valid samples found in {data_dir}. Each speaker directory should contain:\n"
+                f"1. <clip_id>_text.txt - text tokens\n"
+                f"2. <clip_id>.wav - audio file\n"
+                f"3. <clip_id>_mel.pt - mel spectrogram"
             )
         
         self.metadata = self.metadata.iloc[valid_rows].reset_index(drop=True)
@@ -86,13 +89,16 @@ class TTSDataset(Dataset):
         speaker_id = row['speaker_id']
         clip_id = row['clip_id']
         
+        # Get paths
+        speaker_dir = self.data_dir / speaker_id
+        text_file = speaker_dir / f'{clip_id}_text.txt'
+        mel_file = speaker_dir / f'{clip_id}_mel.pt'
+        
         # Load text tokens
-        text_file = self.data_dir / speaker_id / f'{clip_id}_text.txt'
         with open(text_file, 'r') as f:
             text = torch.tensor([int(t) for t in f.read().strip().split()]).long()
         
         # Load pre-computed mel spectrogram
-        mel_file = self.data_dir / speaker_id / f'{clip_id}_mel.pt'
         mel = torch.load(mel_file)
         
         # Calculate durations (placeholder - equal durations)

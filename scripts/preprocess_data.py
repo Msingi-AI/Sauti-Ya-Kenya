@@ -8,16 +8,10 @@ import pandas as pd
 from tqdm import tqdm
 from src.preprocessor import AudioPreprocessor
 
-def find_matching_wav(recordings_dir: Path, speaker_id: str) -> list:
-    """Find all wav files for a speaker"""
-    pattern = f"{speaker_id}_*.wav"
-    return list(recordings_dir.glob(pattern))
-
 def main():
     # Setup paths
     data_dir = Path("data")
     processed_dir = data_dir / "processed"
-    recordings_dir = data_dir / "recordings"
     
     # Load metadata
     metadata_file = processed_dir / "metadata.csv"
@@ -27,42 +21,32 @@ def main():
     # Initialize preprocessor
     preprocessor = AudioPreprocessor()
     
-    # Process each recording
+    # Process each sample
     for idx, row in tqdm(metadata.iterrows(), total=len(metadata)):
         speaker_id = row['speaker_id']
         clip_id = row['clip_id']
         
-        # Create output paths
+        # Create speaker directory
         speaker_dir = processed_dir / speaker_id
-        out_wav = speaker_dir / f"{clip_id}.wav"
-        out_mel = speaker_dir / f"{clip_id}_mel.pt"
+        speaker_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Define output paths
+        text_file = speaker_dir / f"{clip_id}_text.txt"
+        wav_file = speaker_dir / f"{clip_id}.wav"
+        mel_file = speaker_dir / f"{clip_id}_mel.pt"
         
         # Skip if already processed
-        if out_mel.exists() and out_wav.exists():
+        if text_file.exists() and wav_file.exists() and mel_file.exists():
             continue
             
         try:
-            # Find matching wav file
-            wav_files = find_matching_wav(recordings_dir, speaker_id)
-            if not wav_files:
-                print(f"\nNo wav files found for {speaker_id}")
-                continue
-                
-            # Use the first wav file for this speaker
-            wav_path = wav_files[0]
-            
-            # Copy wav file
-            if not out_wav.exists():
-                print(f"\nCopying {wav_path} to {out_wav}")
-                os.system(f'copy "{wav_path}" "{out_wav}"')
-            
             # Generate mel spectrogram
-            mel = preprocessor.process_audio(str(wav_path))
-            torch.save(mel, out_mel)
-            print(f"Generated mel spectrogram: {out_mel}")
+            mel = preprocessor.process_audio(str(wav_file))
+            torch.save(mel, mel_file)
+            print(f"Generated mel spectrogram: {mel_file}")
             
         except Exception as e:
-            print(f"\nError processing {speaker_id}: {e}")
+            print(f"\nError processing {speaker_id}/{clip_id}: {e}")
 
 if __name__ == "__main__":
     main()
