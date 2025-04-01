@@ -10,6 +10,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import OneCycleLR
 from pathlib import Path
 import torchaudio
+import torchaudio.transforms as T
 import numpy as np
 from typing import Dict, List, Tuple, Optional
 from tqdm import tqdm
@@ -29,6 +30,18 @@ class TTSDataset(Dataset):
         metadata_file = self.data_dir / 'metadata.csv'
         self.metadata = pd.read_csv(metadata_file)
         
+        # Setup mel spectrogram transform
+        self.mel_transform = T.MelSpectrogram(
+            sample_rate=22050,
+            n_fft=1024,
+            win_length=1024,
+            hop_length=256,
+            n_mels=80,
+            f_min=0,
+            f_max=8000,
+            normalized=True
+        )
+        
         # Filter out rows where files don't exist
         valid_rows = []
         for idx, row in self.metadata.iterrows():
@@ -37,9 +50,9 @@ class TTSDataset(Dataset):
             
             # Check if required files exist
             text_file = self.split_dir / speaker_id / f'{clip_id}_text.txt'
-            mel_file = self.split_dir / speaker_id / f'{clip_id}_mel.pt'
+            wav_file = self.split_dir / speaker_id / f'{clip_id}.wav'
             
-            if text_file.exists() and mel_file.exists():
+            if text_file.exists() and wav_file.exists():
                 valid_rows.append(idx)
         
         self.metadata = self.metadata.iloc[valid_rows].reset_index(drop=True)
@@ -66,9 +79,10 @@ class TTSDataset(Dataset):
         with open(text_file, 'r') as f:
             text = torch.tensor([int(t) for t in f.read().strip().split()]).long()
         
-        # Load mel spectrogram
-        mel_file = self.split_dir / speaker_id / f'{clip_id}_mel.pt'
-        mel = torch.load(mel_file).float()
+        # Load audio and convert to mel spectrogram
+        wav_file = self.split_dir / speaker_id / f'{clip_id}.wav'
+        waveform, sample_rate = torchaudio.load(wav_file)
+        mel = self.mel_transform(waveform).squeeze(0).transpose(0, 1)  # [T, n_mels]
         
         # Calculate durations (placeholder - equal durations)
         duration = torch.ones(len(text)).long()
