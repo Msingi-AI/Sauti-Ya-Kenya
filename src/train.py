@@ -26,9 +26,55 @@ class TTSDataset(Dataset):
         self.split = split
         self.split_dir = self.data_dir
         
+        print(f"\nInitializing dataset from: {self.data_dir}")
+        
         # Load metadata
         metadata_file = self.data_dir / 'metadata.csv'
+        print(f"Looking for metadata at: {metadata_file}")
+        if not metadata_file.exists():
+            raise FileNotFoundError(f"Metadata file not found at {metadata_file}")
+            
         self.metadata = pd.read_csv(metadata_file)
+        print(f"Loaded metadata with {len(self.metadata)} total samples")
+        
+        # Filter out rows where files don't exist
+        valid_rows = []
+        for idx, row in self.metadata.iterrows():
+            speaker_id = row['speaker_id']
+            clip_id = row['clip_id']
+            
+            # Check if required files exist
+            text_file = self.split_dir / speaker_id / f'{clip_id}_text.txt'
+            wav_file = self.split_dir / speaker_id / f'{clip_id}.wav'
+            
+            print(f"\nChecking files for {speaker_id}/{clip_id}:")
+            print(f"Text file: {text_file} (exists: {text_file.exists()})")
+            print(f"WAV file: {wav_file} (exists: {wav_file.exists()})")
+            
+            if text_file.exists() and wav_file.exists():
+                valid_rows.append(idx)
+                print(" Found all required files")
+            else:
+                print(" Missing required files")
+        
+        if not valid_rows:
+            raise RuntimeError(
+                f"No valid samples found in {data_dir}. "
+                f"Each speaker directory should contain:\n"
+                f"1. clip_XXXX_text.txt - text tokens\n"
+                f"2. clip_XXXX.wav - audio file"
+            )
+        
+        self.metadata = self.metadata.iloc[valid_rows].reset_index(drop=True)
+        print(f"\nFound {len(self.metadata)} valid samples with all required files")
+        
+        # Split data if needed
+        if split == 'train':
+            self.metadata = self.metadata.iloc[:int(len(self.metadata) * 0.9)]
+        else:  # val
+            self.metadata = self.metadata.iloc[int(len(self.metadata) * 0.9):]
+        
+        print(f"{split.capitalize()} set size: {len(self.metadata)}")
         
         # Setup mel spectrogram transform
         self.mel_transform = T.MelSpectrogram(
@@ -42,30 +88,6 @@ class TTSDataset(Dataset):
             normalized=True
         )
         
-        # Filter out rows where files don't exist
-        valid_rows = []
-        for idx, row in self.metadata.iterrows():
-            speaker_id = row['speaker_id']
-            clip_id = row['clip_id']
-            
-            # Check if required files exist
-            text_file = self.split_dir / speaker_id / f'{clip_id}_text.txt'
-            wav_file = self.split_dir / speaker_id / f'{clip_id}.wav'
-            
-            if text_file.exists() and wav_file.exists():
-                valid_rows.append(idx)
-        
-        self.metadata = self.metadata.iloc[valid_rows].reset_index(drop=True)
-        print(f"Found {len(self.metadata)} valid samples with all required files")
-        
-        # Split data if needed
-        if split == 'train':
-            self.metadata = self.metadata.iloc[:int(len(self.metadata) * 0.9)]
-        else:  # val
-            self.metadata = self.metadata.iloc[int(len(self.metadata) * 0.9):]
-        
-        print(f"{split.capitalize()} set size: {len(self.metadata)}")
-    
     def __len__(self):
         return len(self.metadata)
     
