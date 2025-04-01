@@ -249,6 +249,7 @@ def main():
     parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train')
     parser.add_argument('--save_every', type=int, default=10, help='Save checkpoint every N epochs')
     parser.add_argument('--checkpoint_dir', type=str, default='checkpoints', help='Directory to save checkpoints')
+    parser.add_argument('--data_dir', type=str, required=True, help='Directory containing processed data')
     args = parser.parse_args()
     
     # Set memory optimization
@@ -264,13 +265,25 @@ def main():
         print(f"Memory allocated: {torch.cuda.memory_allocated() / 1024**3:.1f}GB")
         print(f"Memory cached: {torch.cuda.memory_reserved() / 1024**3:.1f}GB")
     
+    # Load tokenizer to get vocab size
+    from .preprocessor import SwahiliTokenizer
+    tokenizer = SwahiliTokenizer()
+    tokenizer_path = os.path.join('data', 'tokenizer', 'tokenizer.model')  
+    if not os.path.exists(tokenizer_path):
+        raise RuntimeError(f"Tokenizer not found at {tokenizer_path}")
+    tokenizer.load(tokenizer_path)
+    
     # Initialize datasets
-    train_loader = create_dataloader('processed_data', split='train', batch_size=args.batch_size, num_workers=2 if torch.cuda.is_available() else 0)
-    val_loader = create_dataloader('processed_data', split='val', batch_size=args.batch_size, num_workers=2 if torch.cuda.is_available() else 0, shuffle=False)
+    train_loader = create_dataloader(args.data_dir, split='train', batch_size=args.batch_size, num_workers=2 if torch.cuda.is_available() else 0)
+    val_loader = create_dataloader(args.data_dir, split='val', batch_size=args.batch_size, num_workers=2 if torch.cuda.is_available() else 0, shuffle=False)
+    
+    print(f"Data directory: {args.data_dir}")
+    print(f"Training samples: {len(train_loader.dataset)}")
+    print(f"Validation samples: {len(val_loader.dataset)}")
     
     # Initialize model
     model = FastSpeech2(
-        vocab_size=10000,
+        vocab_size=tokenizer.vocab_size,
         d_model=384,
         n_enc_layers=4,
         n_dec_layers=4,
