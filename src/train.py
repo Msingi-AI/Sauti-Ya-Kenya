@@ -40,21 +40,20 @@ class TTSDataset(Dataset):
     
     def __getitem__(self, idx):
         row = self.metadata.iloc[idx]
+        speaker_id = row['speaker_id']
+        clip_id = row['clip_id']
         
-        # Create unique ID from speaker and clip IDs
-        unique_id = f"{row['speaker_id']}_{row['clip_id']}"
-        
-        # Load text tokens
-        text_path = self.split_dir / 'text_tokens' / f'{unique_id}.npy'
-        text = torch.from_numpy(np.load(text_path)).long()
+        # Load text tokens (need to convert text to tokens first)
+        text_file = self.split_dir / speaker_id / f'{clip_id}_text.txt'
+        with open(text_file, 'r') as f:
+            text = torch.tensor([int(t) for t in f.read().strip().split()]).long()
         
         # Load mel spectrogram
-        mel_path = self.split_dir / 'mel' / f'{unique_id}.npy'
-        mel = torch.from_numpy(np.load(mel_path)).float()
+        mel_file = self.split_dir / speaker_id / f'{clip_id}_mel.pt'
+        mel = torch.load(mel_file).float()
         
-        # Load duration
-        duration_path = self.split_dir / 'duration' / f'{unique_id}.npy'
-        duration = torch.from_numpy(np.load(duration_path)).long()
+        # Calculate durations (placeholder - equal durations)
+        duration = torch.ones(len(text)).long()
         
         return text, mel, duration
 
