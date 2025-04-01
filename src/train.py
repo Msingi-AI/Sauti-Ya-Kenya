@@ -23,12 +23,18 @@ class TTSDataset(Dataset):
     def __init__(self, data_dir, split='train'):
         self.data_dir = Path(data_dir)
         self.split = split
-        self.split_dir = self.data_dir / split
+        self.split_dir = self.data_dir
         
         # Load metadata
-        metadata_file = self.data_dir / f'{split}_metadata.csv'
+        metadata_file = self.data_dir / 'metadata.csv'  
         self.metadata = pd.read_csv(metadata_file)
         
+        # Split data if needed
+        if split == 'train':
+            self.metadata = self.metadata.iloc[:int(len(self.metadata) * 0.9)]  
+        else:  
+            self.metadata = self.metadata.iloc[int(len(self.metadata) * 0.9):]  
+
     def __len__(self):
         return len(self.metadata)
     
