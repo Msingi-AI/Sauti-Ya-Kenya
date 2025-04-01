@@ -280,12 +280,14 @@ def main():
     tokenizer.load(tokenizer_path)
     
     # Initialize datasets
-    train_loader = create_dataloader(args.data_dir, split='train', batch_size=args.batch_size, num_workers=2 if torch.cuda.is_available() else 0)
-    val_loader = create_dataloader(args.data_dir, split='val', batch_size=args.batch_size, num_workers=2 if torch.cuda.is_available() else 0, shuffle=False)
+    train_loader = create_dataloader(args.data_dir, split='train', batch_size=min(args.batch_size, 4), num_workers=2 if torch.cuda.is_available() else 0)
+    val_loader = create_dataloader(args.data_dir, split='val', batch_size=min(args.batch_size, 4), num_workers=2 if torch.cuda.is_available() else 0, shuffle=False)
     
     print(f"Data directory: {args.data_dir}")
     print(f"Training samples: {len(train_loader.dataset)}")
     print(f"Validation samples: {len(val_loader.dataset)}")
+    print(f"Batch size: {min(args.batch_size, 4)}")
+    print(f"Steps per epoch: {max(1, len(train_loader) // args.grad_accum)}")
     
     # Initialize model
     model = FastSpeech2(
@@ -305,12 +307,10 @@ def main():
         optimizer,
         max_lr=0.001,
         epochs=args.epochs,
-        steps_per_epoch=len(train_loader) // args.grad_accum,
+        steps_per_epoch=max(1, len(train_loader) // args.grad_accum),  # Ensure at least 1 step
         pct_start=0.1,
         anneal_strategy='cos',
         cycle_momentum=True,
-        base_momentum=0.85,
-        max_momentum=0.95,
         div_factor=25.0,
         final_div_factor=1e4,
         three_phase=False
