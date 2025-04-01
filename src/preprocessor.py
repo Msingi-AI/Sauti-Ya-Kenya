@@ -8,6 +8,8 @@ from typing import List, Tuple, Dict, Optional
 from dataclasses import dataclass
 from transformers import PreTrainedTokenizer
 import sentencepiece as spm
+import torchaudio
+import torchaudio.transforms as T
 
 @dataclass
 class TextTokens:
@@ -259,10 +261,38 @@ class TextPreprocessor:
 class AudioPreprocessor:
     def __init__(self, sample_rate=22050):
         self.sample_rate = sample_rate
+        self.mel_transform = T.MelSpectrogram(
+            sample_rate=sample_rate,
+            n_fft=1024,
+            win_length=1024,
+            hop_length=256,
+            n_mels=80,
+            f_min=0,
+            f_max=8000,
+            normalized=True
+        )
         
     def process_audio(self, audio_path: str):
         """
         Process audio files for training/inference
+        
+        Args:
+            audio_path: Path to wav file
+            
+        Returns:
+            mel: Mel spectrogram tensor
         """
-        # Will implement audio preprocessing
-        pass
+        # Load and resample if needed
+        waveform, sr = torchaudio.load(audio_path)
+        if sr != self.sample_rate:
+            resampler = T.Resample(sr, self.sample_rate)
+            waveform = resampler(waveform)
+            
+        # Convert to mono if stereo
+        if waveform.size(0) > 1:
+            waveform = torch.mean(waveform, dim=0, keepdim=True)
+            
+        # Generate mel spectrogram
+        mel = self.mel_transform(waveform).squeeze(0).transpose(0, 1)  # [T, n_mels]
+        
+        return mel
