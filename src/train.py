@@ -24,7 +24,6 @@ class TTSDataset(Dataset):
     def __init__(self, data_dir, split='train'):
         self.data_dir = Path(data_dir)
         self.split = split
-        self.split_dir = self.data_dir
         
         print(f"\nInitializing dataset from: {self.data_dir}")
         
@@ -44,14 +43,16 @@ class TTSDataset(Dataset):
             clip_id = row['clip_id']
             
             # Check if required files exist
-            text_file = self.split_dir / speaker_id / f'{clip_id}_text.txt'
-            wav_file = self.split_dir / speaker_id / f'{clip_id}.wav'
+            text_file = self.data_dir / speaker_id / f'{clip_id}_text.txt'
+            wav_file = self.data_dir / speaker_id / f'{clip_id}.wav'
+            mel_file = self.data_dir / speaker_id / f'{clip_id}_mel.pt'
             
             print(f"\nChecking files for {speaker_id}/{clip_id}:")
             print(f"Text file: {text_file} (exists: {text_file.exists()})")
             print(f"WAV file: {wav_file} (exists: {wav_file.exists()})")
+            print(f"Mel file: {mel_file} (exists: {mel_file.exists()})")
             
-            if text_file.exists() and wav_file.exists():
+            if text_file.exists() and wav_file.exists() and mel_file.exists():
                 valid_rows.append(idx)
                 print(" Found all required files")
             else:
@@ -61,8 +62,9 @@ class TTSDataset(Dataset):
             raise RuntimeError(
                 f"No valid samples found in {data_dir}. "
                 f"Each speaker directory should contain:\n"
-                f"1. clip_XXXX_text.txt - text tokens\n"
-                f"2. clip_XXXX.wav - audio file"
+                f"1. {clip_id}_text.txt - text tokens\n"
+                f"2. {clip_id}.wav - audio file\n"
+                f"3. {clip_id}_mel.pt - mel spectrogram"
             )
         
         self.metadata = self.metadata.iloc[valid_rows].reset_index(drop=True)
@@ -75,19 +77,7 @@ class TTSDataset(Dataset):
             self.metadata = self.metadata.iloc[int(len(self.metadata) * 0.9):]
         
         print(f"{split.capitalize()} set size: {len(self.metadata)}")
-        
-        # Setup mel spectrogram transform
-        self.mel_transform = T.MelSpectrogram(
-            sample_rate=22050,
-            n_fft=1024,
-            win_length=1024,
-            hop_length=256,
-            n_mels=80,
-            f_min=0,
-            f_max=8000,
-            normalized=True
-        )
-        
+    
     def __len__(self):
         return len(self.metadata)
     
@@ -97,14 +87,13 @@ class TTSDataset(Dataset):
         clip_id = row['clip_id']
         
         # Load text tokens
-        text_file = self.split_dir / speaker_id / f'{clip_id}_text.txt'
+        text_file = self.data_dir / speaker_id / f'{clip_id}_text.txt'
         with open(text_file, 'r') as f:
             text = torch.tensor([int(t) for t in f.read().strip().split()]).long()
         
-        # Load audio and convert to mel spectrogram
-        wav_file = self.split_dir / speaker_id / f'{clip_id}.wav'
-        waveform, sample_rate = torchaudio.load(wav_file)
-        mel = self.mel_transform(waveform).squeeze(0).transpose(0, 1)  # [T, n_mels]
+        # Load pre-computed mel spectrogram
+        mel_file = self.data_dir / speaker_id / f'{clip_id}_mel.pt'
+        mel = torch.load(mel_file)
         
         # Calculate durations (placeholder - equal durations)
         duration = torch.ones(len(text)).long()
