@@ -30,8 +30,9 @@ clips/
 *.mp3
 *.pt
 
-# Ignore recordings directory (raw audio files)
+# Raw audio recordings
 data/recordings/
+recordings/
 
 # IDE
 .vscode/
