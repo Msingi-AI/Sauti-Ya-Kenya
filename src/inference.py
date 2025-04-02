@@ -3,12 +3,13 @@ Inference script for Kenyan Swahili TTS model
 """
 import argparse
 import torch
+import torch.nn as nn
 import torchaudio
 from pathlib import Path
 
 from preprocessor import TextPreprocessor, SwahiliTokenizer
 from model import FastSpeech2
-from vocoder import load_hifigan
+from vocoder import HiFiGAN
 
 def load_model(checkpoint_path: str, device: str = 'cpu') -> FastSpeech2:
     """
@@ -28,29 +29,61 @@ def load_model(checkpoint_path: str, device: str = 'cpu') -> FastSpeech2:
     )
     
     # Load checkpoint
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-    
-    # Handle different checkpoint formats
-    if isinstance(checkpoint, dict):
-        state_dict = checkpoint.get('model_state_dict', checkpoint)
-    else:
-        state_dict = checkpoint
-    
-    # Clean up state dict
-    cleaned_state_dict = {}
-    for k, v in state_dict.items():
-        # Remove 'module.' prefix if present (from DataParallel)
-        if k.startswith('module.'):
-            k = k[7:]
-        cleaned_state_dict[k] = v
-    
-    # Load cleaned state dict
-    missing_keys, unexpected_keys = model.load_state_dict(cleaned_state_dict, strict=False)
-    
-    if missing_keys:
-        print("Missing keys:", missing_keys)
-    if unexpected_keys:
-        print("Unexpected keys:", unexpected_keys)
+    try:
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        
+        # Handle different checkpoint formats
+        if isinstance(checkpoint, dict):
+            state_dict = checkpoint.get('model_state_dict', checkpoint)
+        else:
+            state_dict = checkpoint
+        
+        # Clean up state dict
+        cleaned_state_dict = {}
+        for k, v in state_dict.items():
+            # Remove 'module.' prefix if present (from DataParallel)
+            if k.startswith('module.'):
+                k = k[7:]
+            cleaned_state_dict[k] = v
+        
+        # Load cleaned state dict
+        missing_keys, unexpected_keys = model.load_state_dict(cleaned_state_dict, strict=False)
+        
+        if missing_keys:
+            print("\nInitializing missing keys:")
+            for key in missing_keys:
+                if 'embedding' in key:
+                    print(f"Initializing {key} with Xavier uniform")
+                    if hasattr(model, 'embedding'):
+                        nn.init.xavier_uniform_(model.embedding.weight)
+                elif 'length_layer' in key:
+                    print(f"Initializing {key} with Xavier uniform")
+                    for m in model.length_regulator.length_layer.modules():
+                        if isinstance(m, nn.Linear):
+                            nn.init.xavier_uniform_(m.weight)
+                            if m.bias is not None:
+                                nn.init.zeros_(m.bias)
+                elif 'pe' in key:
+                    print(f"Skipping {key} - will be initialized by PositionalEncoding")
+                else:
+                    print(f"Warning: {key} not initialized")
+        
+        if unexpected_keys:
+            print("\nUnexpected keys:", unexpected_keys)
+            
+    except Exception as e:
+        print(f"\nError loading checkpoint: {str(e)}")
+        print("Initializing model from scratch")
+        
+        # Initialize embedding
+        nn.init.xavier_uniform_(model.embedding.weight)
+        
+        # Initialize length regulator
+        for m in model.length_regulator.length_layer.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
     
     model = model.to(device)
     model.eval()  # Set to evaluation mode
@@ -114,7 +147,7 @@ def main():
     print("Loaded TTS model")
     
     # Load vocoder
-    vocoder = load_hifigan(device)
+    vocoder = HiFiGAN(device)
     print("Loaded HiFi-GAN vocoder")
     
     # Synthesize speech
