@@ -28,14 +28,20 @@ def main():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Using device: {device}")
     
-    # Initialize models
-    tokenizer = SwahiliTokenizer()
+    # Initialize tokenizer and preprocessor
+    print(f"\nLoading tokenizer from: {tokenizer_path}")
+    tokenizer = SwahiliTokenizer(vocab_size=8000)
     tokenizer.load(tokenizer_path)
     preprocessor = TextPreprocessor(tokenizer)
+    print("Loaded tokenizer and preprocessor")
     
+    # Load TTS model
+    print(f"\nLoading TTS model from: {checkpoint_path}")
     model = load_model(checkpoint_path, device)
     print("Loaded TTS model")
     
+    # Load vocoder
+    print("\nLoading HiFi-GAN vocoder")
     vocoder = load_hifigan(device)
     print("Loaded HiFi-GAN vocoder")
     
@@ -65,6 +71,11 @@ def main():
         audio = audio.unsqueeze(0)  # Add channels dimension for stereo
     
     try:
+        # Normalize audio to prevent clipping
+        max_val = audio.abs().max()
+        if max_val > 0:
+            audio = audio / max_val
+        
         torchaudio.save(str(output_path), audio, 22050)
         print(f"\nSaved audio to: {output_path}")
         

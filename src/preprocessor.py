@@ -132,110 +132,45 @@ class TextPreprocessor:
             "ndai": "gari",
             "nduthi": "pikipiki",
             "mathree": "matatu",
-            "nganya": "matatu",
-            
-            # Informal words
-            "uko": "upo",
-            "zii": "hapana",
-            "sio": "siyo",
-            "yawa": "aisee",
-            
-            # Modern expressions
-            "kuconnect": "kuunganisha",
-            "kudiscuss": "kujadili",
-            "kupromote": "kukuza",
-            "kudownload": "kupakua",
-            "kusave": "kuhifadhi",
-            
-            # Social media
-            "dm": "ujumbe",
-            "status": "hali",
-            "profile": "wasifu",
-            
-            # Technology
-            "simu": "rununu",
-            "kompyuta": "tarakilishi",
-            "internet": "mtandao",
-            "wifi": "mtandao",
-            
-            # Business
-            "biashara": "biashara",
-            "bei": "gharama",
-            "ofa": "punguzo",
-            
-            # Transportation
-            "boda": "pikipiki",
-            "tuktuk": "bajaji",
-            
-            # Food and drinks
-            "chai": "majani",
-            "soda": "kinywaji",
-            "juice": "sharubati",
-            
-            # Locations
-            "town": "mjini",
-            "shags": "mashambani",
-            "mtaa": "mtaa",
-            
-            # Education
-            "shule": "skuli",
-            "masomo": "masomo",
-            "exam": "mtihani",
-            
-            # Entertainment
-            "movie": "filamu",
-            "show": "tamasha",
-            "game": "mchezo"
+            "nganya": "matatu"
         }
-
+        
+        # Special tokens
+        self.BOS = "[BOS]"  # Beginning of sentence
+        self.EOS = "[EOS]"  # End of sentence
+        self.PAD = "[PAD]"  # Padding token
+        
+    def clean_text(self, text: str) -> str:
+        """Basic text cleaning"""
+        # Convert to lowercase
+        text = text.lower().strip()
+        
+        # Replace multiple spaces with single space
+        text = re.sub(r'\s+', ' ', text)
+        
+        # Remove special characters except period and comma
+        text = re.sub(r'[^a-z0-9\s\.,]', '', text)
+        
+        return text
+        
     def normalize_numbers(self, text: str) -> str:
         """Convert numbers to words"""
         words = []
         for word in text.split():
             if word.isdigit():
                 # Convert each digit to word
-                number_words = ' '.join(self.number_map[d] for d in word)
-                words.append(number_words)
+                number_words = [self.number_map[d] for d in word]
+                words.append(" ".join(number_words))
             else:
                 words.append(word)
-        return ' '.join(words)
-
+        return " ".join(words)
+        
     def normalize_expressions(self, text: str) -> str:
         """Normalize common expressions"""
-        words = text.split()
-        normalized = []
-        i = 0
-        while i < len(words):
-            # Check for two-word expressions
-            if i < len(words) - 1:
-                two_words = ' '.join(words[i:i+2])
-                if two_words in self.expressions:
-                    normalized.append(self.expressions[two_words])
-                    i += 2
-                    continue
-            
-            # Check single word
-            if words[i] in self.expressions:
-                normalized.append(self.expressions[words[i]])
-            else:
-                normalized.append(words[i])
-            i += 1
-            
-        return ' '.join(normalized)
-
-    def clean_text(self, text: str) -> str:
-        """Basic text cleaning"""
-        # Convert to lowercase
-        text = text.lower()
+        for expr, norm in self.expressions.items():
+            text = re.sub(r'\b' + expr + r'\b', norm, text)
+        return text
         
-        # Replace multiple spaces with single space
-        text = re.sub(r'\s+', ' ', text)
-        
-        # Remove special characters except basic punctuation
-        text = re.sub(r'[^a-z0-9\s.,!?\'\"()-]', '', text)
-        
-        return text.strip()
-
     def process_text(self, text: str) -> TextTokens:
         """
         Process input text
@@ -244,19 +179,27 @@ class TextPreprocessor:
         Returns:
             TextTokens object containing token IDs and processed text
         """
-        # Clean text
+        # Clean and normalize text
         text = self.clean_text(text)
-        
-        # Normalize numbers
         text = self.normalize_numbers(text)
-        
-        # Normalize expressions
         text = self.normalize_expressions(text)
         
-        # Tokenize
-        token_ids = self.tokenizer.encode(text)
+        # Add special tokens
+        text = f"{self.BOS} {text} {self.EOS}"
         
-        return TextTokens(token_ids=token_ids, text=text)
+        # Print processed text
+        print(f"Processed text: '{text}'")
+        
+        # Tokenize
+        if not self.tokenizer.sp_model:
+            raise ValueError("Tokenizer model not loaded. Call load() first.")
+            
+        token_ids = self.tokenizer.sp_model.encode_as_ids(text)
+        
+        return TextTokens(
+            token_ids=token_ids,
+            text=text
+        )
 
 class AudioPreprocessor:
     def __init__(self, sample_rate=22050):
