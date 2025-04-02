@@ -309,26 +309,37 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description='Train TTS model')
     parser.add_argument('--resume', type=str, help='Path to checkpoint to resume from')
-    parser.add_argument('--batch_size', type=int, default=8, help='Batch size')
-    parser.add_argument('--grad_accum', type=int, default=4, help='Gradient accumulation steps')
-    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs to train')
+    parser.add_argument('--batch_size', type=int, default=32, help='Batch size')
+    parser.add_argument('--grad_accum', type=int, default=1, help='Gradient accumulation steps')
+    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs')
     parser.add_argument('--save_every', type=int, default=10, help='Save checkpoint every N epochs')
     parser.add_argument('--checkpoint_dir', type=str, default='checkpoints', help='Directory to save checkpoints')
     parser.add_argument('--data_dir', type=str, required=True, help='Directory containing processed data')
     parser.add_argument('--metadata_path', type=str, required=True, help='Path to metadata CSV file')
     parser.add_argument('--tokenizer_path', type=str, required=True, help='Path to tokenizer model')
+    parser.add_argument('--use_drive', action='store_true', help='Save checkpoints to Google Drive')
     args = parser.parse_args()
     
+    # Mount Google Drive if requested
+    if args.use_drive:
+        from google.colab import drive
+        drive.mount('/content/drive')
+        checkpoint_dir = '/content/drive/MyDrive/Sauti-Ya-Kenya/checkpoints'
+    else:
+        checkpoint_dir = args.checkpoint_dir
+        
+    # Create checkpoint directory
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    print(f"Saving checkpoints to: {checkpoint_dir}")
+    
     # Set memory optimization
-    torch.cuda.empty_cache()
-    os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:32'
-    
-    # Set device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}")
-    
     if torch.cuda.is_available():
-        print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f}GB")
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        
+        # Print GPU info
+        print("\nGPU Information:")
+        print(f"Device: {torch.cuda.get_device_name(0)}")
         print(f"Memory allocated: {torch.cuda.memory_allocated() / 1024**3:.1f}GB")
         print(f"Memory cached: {torch.cuda.memory_reserved() / 1024**3:.1f}GB")
     
@@ -340,7 +351,6 @@ def main():
     print(f"Training samples: {len(train_loader.dataset)}")
     print(f"Validation samples: {len(val_loader.dataset)}")
     print(f"Batch size: {min(args.batch_size, 4)}")
-    print(f"Steps per epoch: {max(1, len(train_loader) // args.grad_accum)}")
     
     # Initialize model
     model = FastSpeech2(
@@ -350,23 +360,21 @@ def main():
         n_dec_layers=4,
         n_heads=2,
         d_ff=1536,
-        n_mels=80,
         dropout=0.1
-    ).to(device)
+    )
     
-    # Initialize optimizer and scheduler
-    optimizer = AdamW(model.parameters(), lr=0.001, weight_decay=0.01)
-    scheduler = OneCycleLR(
-        optimizer,
-        max_lr=0.001,
-        epochs=args.epochs,
-        steps_per_epoch=max(1, len(train_loader) // args.grad_accum),  # Ensure at least 1 step
-        pct_start=0.1,
-        anneal_strategy='cos',
-        cycle_momentum=True,
-        div_factor=25.0,
-        final_div_factor=1e4,
-        three_phase=False
+    # Move model to device
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = model.to(device)
+    print(f"Using device: {device}")
+    
+    # Initialize optimizer with gradient clipping
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=1e-4,
+        betas=(0.9, 0.98),
+        eps=1e-9,
+        weight_decay=0.01
     )
     
     # Initialize trainer
@@ -376,7 +384,7 @@ def main():
         val_loader=val_loader,
         optimizer=optimizer,
         device=device,
-        checkpoint_dir=args.checkpoint_dir,
+        checkpoint_dir=checkpoint_dir,
         grad_accum_steps=args.grad_accum
     )
     
