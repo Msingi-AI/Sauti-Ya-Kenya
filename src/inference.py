@@ -18,11 +18,13 @@ def load_model(checkpoint_path: str, device: str = 'cpu') -> FastSpeech2:
     model = FastSpeech2(
         vocab_size=32000,  # SentencePiece vocab size
         d_model=384,
-        n_layers=4,
+        n_enc_layers=4,    # Encoder layers
+        n_dec_layers=4,    # Decoder layers
         n_heads=2,
-        d_inner=1536,
-        max_len=10000,
-        n_bins=256
+        d_ff=1536,
+        n_mels=80,
+        dropout=0.1,
+        max_len=10000
     )
     
     # Load checkpoint
