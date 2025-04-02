@@ -72,7 +72,12 @@ class LengthRegulator(nn.Module):
     """Duration predictor for expanding encoder outputs"""
     def __init__(self, d_model: int):
         super().__init__()
-        self.length_layer = nn.Linear(d_model, 1)
+        self.length_layer = nn.Sequential(
+            nn.Linear(d_model, d_model // 2),
+            nn.ReLU(),
+            nn.Linear(d_model // 2, 1),
+            nn.Softplus()  # Ensure positive durations
+        )
         
     def forward(self, x: torch.Tensor, duration_target: Optional[torch.Tensor] = None):
         """
@@ -91,11 +96,17 @@ class LengthRegulator(nn.Module):
         
         # Predict durations
         duration_pred = self.length_layer(x).squeeze(-1)  # [B, T]
-        duration_pred = torch.clamp(torch.exp(duration_pred) - 1, min=0)  # Make durations positive
         
-        # During inference, scale up durations to make output longer
+        # During inference, ensure minimum duration and scale up
         if duration_target is None:
-            duration_pred = (duration_pred * 20).ceil()  # Scale factor of 20
+            min_duration = 8  # Minimum frames per phoneme
+            duration_pred = torch.maximum(
+                duration_pred,
+                torch.ones_like(duration_pred) * min_duration
+            )
+            duration_pred = torch.round(duration_pred)
+        
+        print(f"Predicted durations: {duration_pred[0].tolist()}")
         
         # Expand according to durations
         batch_size, max_length, channels = x.shape
@@ -106,9 +117,8 @@ class LengthRegulator(nn.Module):
         cur_pos = 0
         for i in range(max_length):
             dur = int(duration_pred[0, i].item())
-            if dur > 0:
-                expanded[:, cur_pos:cur_pos + dur] = x[:, i:i + 1]
-                cur_pos += dur
+            expanded[:, cur_pos:cur_pos + dur] = x[:, i:i + 1]
+            cur_pos += dur
         
         # Print output shapes
         print("\nLengthRegulator output shapes:")
