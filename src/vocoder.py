@@ -7,6 +7,7 @@ import torch.nn.functional as F
 import torchaudio
 from typing import List, Optional, Tuple
 from einops import rearrange
+import numpy as np
 
 class ResBlock(nn.Module):
     def __init__(self, channels: int, kernel_size: int = 3, dilations: List[int] = [1, 3, 5]):
@@ -47,27 +48,39 @@ class Generator(nn.Module):
                  resblock_dilations: List[List[int]] = [[1, 3, 5], [1, 3, 5], [1, 3, 5]]):
         super().__init__()
         
-        self.conv_pre = nn.Conv1d(80, initial_channel, 7, padding=3)  # 80 = mel channels
+        self.hop_length = np.prod(upsample_rates)  # Total upsampling factor
         
-        # Upsample layers
+        # Initial conv to convert mel spectrogram to hidden features
+        self.conv_pre = nn.Conv1d(80, initial_channel, 3, padding=1)
+        
+        # Upsample to audio sample rate
         self.ups = nn.ModuleList()
         curr_channel = initial_channel
+        
         for i, (u_rate, u_k) in enumerate(zip(upsample_rates, upsample_kernel_sizes)):
+            # Calculate padding to maintain length after transposed conv
+            padding = (u_k - u_rate) // 2
+            
             self.ups.append(
                 nn.Sequential(
-                    nn.ConvTranspose1d(curr_channel, curr_channel // 2,
-                                     u_k, stride=u_rate, padding=(u_k-u_rate)//2),
-                    nn.LeakyReLU(0.1)
+                    nn.LeakyReLU(0.1),
+                    nn.ConvTranspose1d(
+                        curr_channel, curr_channel // 2,
+                        u_k, stride=u_rate,
+                        padding=padding
+                    )
                 )
             )
             curr_channel //= 2
         
-        # Multi-Receptive Field Fusion blocks
+        # Apply MRF blocks for better audio quality
         self.mrf_blocks = nn.ModuleList([
-            MRF(curr_channel, resblock_kernel_sizes) for _ in range(len(resblock_dilations))
+            MRF(curr_channel, [3, 5, 7])  # Smaller kernel sizes
+            for _ in range(3)  # Use 3 MRF blocks
         ])
         
-        self.conv_post = nn.Conv1d(curr_channel, 1, 7, padding=3)
+        # Final conv to generate waveform
+        self.conv_post = nn.Conv1d(curr_channel, 1, 3, padding=1)
         
     def forward(self, mel: torch.Tensor) -> torch.Tensor:
         """
@@ -83,19 +96,36 @@ class Generator(nn.Module):
         elif mel.dim() == 3 and mel.size(1) != 80:
             mel = mel.transpose(1, 2)  # Swap channels and time
             
+        # Print shapes for debugging
+        print(f"\nVocoder input shape: {mel.shape}")
+        
+        # Ensure minimum input length
+        min_length = 8  # Minimum length needed for upsampling
+        if mel.size(-1) < min_length:
+            pad_length = min_length - mel.size(-1)
+            mel = F.pad(mel, (0, pad_length), mode='replicate')
+            print(f"Padded mel shape: {mel.shape}")
+        
         # Generate waveform
         x = self.conv_pre(mel)
+        print(f"After conv_pre shape: {x.shape}")
         
-        for up in self.ups:
+        # Upsample in stages
+        for i, up in enumerate(self.ups):
             x = up(x)
-            
-        for mrf in self.mrf_blocks:
-            x = mrf(x)
-            
+            print(f"After upsample {i+1} shape: {x.shape}")
+        
+        # Apply MRF blocks
+        for i, mrf in enumerate(self.mrf_blocks):
+            x = x + mrf(x)  # Residual connection
+            print(f"After MRF {i+1} shape: {x.shape}")
+        
+        # Final processing
         x = F.leaky_relu(x, 0.1)
         x = self.conv_post(x)
         x = torch.tanh(x)
         
+        print(f"Final waveform shape: {x.shape}")
         return x
 
 class MelSpectrogram(nn.Module):
@@ -160,7 +190,7 @@ class PeriodDiscriminator(nn.Module):
             x = F.pad(x, (0, n_pad), "reflect")
             time = time + n_pad
             
-        x = rearrange(x, 'b c (t p) -> b c t p', p=self.period)
+        x = rearrange(x, 'b c (t p) -> b 1 t p', p=self.period)
         x = rearrange(x, 'b c t p -> b 1 t p')
         
         fmap = []

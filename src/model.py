@@ -69,58 +69,52 @@ class FFTBlock(nn.Module):
         return x
 
 class LengthRegulator(nn.Module):
-    def __init__(self, max_len: int = 10000):
+    """Duration predictor for expanding encoder outputs"""
+    def __init__(self, d_model: int):
         super().__init__()
-        self.length_layer = nn.Linear(384, 1)  # d_model -> 1
-        self.max_len = max_len
+        self.length_layer = nn.Linear(d_model, 1)
         
     def forward(self, x: torch.Tensor, duration_target: Optional[torch.Tensor] = None):
         """
+        Expand input sequence according to predicted or target durations
         Args:
-            x: Input tensor [B, T, C]
-            duration_target: Duration target [B, T] or None
+            x: Input tensor (B, T, d_model)
+            duration_target: Target durations (B, T) or None for inference
         Returns:
-            expanded: Expanded tensor [B, T', C]
-            duration_pred: Predicted durations [B, T]
+            expanded: Expanded tensor (B, T', d_model)
+            duration_pred: Predicted durations (B, T)
         """
-        print(f"\nLengthRegulator input shapes:")
+        # Print input shapes
+        print("\nLengthRegulator input shapes:")
         print(f"x: {x.shape}")
-        print(f"duration_target: {duration_target.shape if duration_target is not None else None}")
+        print(f"duration_target: {duration_target}")
         
-        # Predict duration if not provided
-        log_duration_pred = self.length_layer(x)  # [B, T, 1]
-        duration_pred = torch.exp(log_duration_pred.squeeze(-1))  # [B, T]
+        # Predict durations
+        duration_pred = self.length_layer(x).squeeze(-1)  # [B, T]
+        duration_pred = torch.clamp(torch.exp(duration_pred) - 1, min=0)  # Make durations positive
         
-        # Use predicted or target duration
-        duration_rounded = duration_target if duration_target is not None else torch.round(duration_pred)
+        # During inference, scale up durations to make output longer
+        if duration_target is None:
+            duration_pred = (duration_pred * 20).ceil()  # Scale factor of 20
         
-        # Calculate total expanded length for each sequence
-        expanded_lens = duration_rounded.sum(dim=1)  # [B]
-        max_expanded_len = int(expanded_lens.max().item())
+        # Expand according to durations
+        batch_size, max_length, channels = x.shape
+        total_length = int(duration_pred.sum().item())
+        expanded = torch.zeros(batch_size, total_length, channels).to(x.device)
         
-        if max_expanded_len > self.max_len:
-            # Scale down durations to fit max_len
-            scale_factor = self.max_len / max_expanded_len
-            duration_rounded = torch.floor(duration_rounded * scale_factor)
-            print(f"Warning: Max expanded length {max_expanded_len} exceeds maximum length {self.max_len}. Scaling durations.")
-            max_expanded_len = self.max_len
-            
-        # Expand according to duration
-        batch_size, seq_len, channels = x.shape
-        expanded = torch.zeros(batch_size, max_expanded_len, channels).to(x.device)
+        # Fill expanded tensor
+        cur_pos = 0
+        for i in range(max_length):
+            dur = int(duration_pred[0, i].item())
+            if dur > 0:
+                expanded[:, cur_pos:cur_pos + dur] = x[:, i:i + 1]
+                cur_pos += dur
         
-        for b in range(batch_size):
-            current_pos = 0
-            for t in range(seq_len):
-                expanded_size = int(duration_rounded[b, t].item())
-                if expanded_size > 0:
-                    expanded[b, current_pos:current_pos + expanded_size] = x[b, t:t+1].expand(expanded_size, -1)
-                    current_pos += expanded_size
-        
-        print(f"\nLengthRegulator output shapes:")
+        # Print output shapes
+        print("\nLengthRegulator output shapes:")
         print(f"expanded: {expanded.shape}")
         print(f"duration_pred: {duration_pred.shape}")
-                
+        
         return expanded, duration_pred
 
 class Encoder(nn.Module):
@@ -217,7 +211,7 @@ class FastSpeech2(nn.Module):
             max_len=max_len
         )
         
-        self.length_regulator = LengthRegulator(max_len=max_len)
+        self.length_regulator = LengthRegulator(d_model)
         
         self.decoder = Decoder(
             d_model=d_model,
