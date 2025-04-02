@@ -49,18 +49,56 @@ pytorch 2.0+
 torchaudio
 numpy
 pandas
-soundfile
 ```
 
 ### Installation
 
+1. Clone the repository:
 ```bash
-# Clone the repository
 git clone https://github.com/Msingi-AI/Sauti-Ya-Kenya.git
 cd Sauti-Ya-Kenya
+```
 
-# Install dependencies
+2. Install dependencies:
+```bash
 pip install -r requirements.txt
+```
+
+3. Download the pre-trained models:
+- Download the FastSpeech2 model from [releases](https://github.com/Msingi-AI/Sauti-Ya-Kenya/releases)
+- Place it in the `models` directory
+
+### Quick Start
+
+```python
+import torch
+from src.inference import load_model, synthesize
+from src.preprocessor import TextPreprocessor, SwahiliTokenizer
+from src.vocoder import load_hifigan
+
+# Load models
+model = load_model("models/tts_model.pt")
+tokenizer = SwahiliTokenizer()
+tokenizer.load("models/tokenizer.model")
+preprocessor = TextPreprocessor(tokenizer)
+vocoder = load_hifigan()
+
+# Synthesize speech
+text = "Karibu kwenye mfano wa matini-hadi-usemi."
+audio = synthesize(text, model, preprocessor, vocoder)
+
+# Save audio
+import torchaudio
+torchaudio.save("output.wav", audio.unsqueeze(0), 22050)
+```
+
+### Examples
+
+Check out `examples/tts_demo.py` for a complete example of how to use the model.
+
+To run the demo:
+```bash
+python examples/tts_demo.py
 ```
 
 ## Contributing Voice Data 🗣️

@@ -49,26 +49,42 @@ class Generator(nn.Module):
         
         self.conv_pre = nn.Conv1d(80, initial_channel, 7, padding=3)  # 80 = mel channels
         
-        channels = initial_channel
+        # Upsample layers
         self.ups = nn.ModuleList()
-        for i, (u, k) in enumerate(zip(upsample_rates, upsample_kernel_sizes)):
-            self.ups.append(nn.Sequential(
-                nn.LeakyReLU(0.1),
-                nn.ConvTranspose1d(channels // (1 if i == 0 else 2),
-                                 channels // 2,
-                                 k, stride=u, padding=(k-u)//2)
-            ))
-            channels = channels // 2
-            
+        curr_channel = initial_channel
+        for i, (u_rate, u_k) in enumerate(zip(upsample_rates, upsample_kernel_sizes)):
+            self.ups.append(
+                nn.Sequential(
+                    nn.ConvTranspose1d(curr_channel, curr_channel // 2,
+                                     u_k, stride=u_rate, padding=(u_k-u_rate)//2),
+                    nn.LeakyReLU(0.1)
+                )
+            )
+            curr_channel //= 2
+        
+        # Multi-Receptive Field Fusion blocks
         self.mrf_blocks = nn.ModuleList([
-            MRF(channels, resblock_kernel_sizes) 
-            for _ in range(len(resblock_dilations))
+            MRF(curr_channel, resblock_kernel_sizes) for _ in range(len(resblock_dilations))
         ])
         
-        self.conv_post = nn.Conv1d(channels, 1, 7, padding=3)
+        self.conv_post = nn.Conv1d(curr_channel, 1, 7, padding=3)
         
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.conv_pre(x)
+    def forward(self, mel: torch.Tensor) -> torch.Tensor:
+        """
+        Convert mel-spectrogram to waveform
+        Args:
+            mel: (batch_size, n_mel_channels, time) or (n_mel_channels, time)
+        Returns:
+            waveform: (batch_size, 1, time * hop_length)
+        """
+        # Ensure mel is in the right format
+        if mel.dim() == 2:
+            mel = mel.unsqueeze(0)  # Add batch dimension
+        elif mel.dim() == 3 and mel.size(1) != 80:
+            mel = mel.transpose(1, 2)  # Swap channels and time
+            
+        # Generate waveform
+        x = self.conv_pre(mel)
         
         for up in self.ups:
             x = up(x)
@@ -248,3 +264,14 @@ class HiFiGAN(nn.Module):
         with torch.no_grad():
             audio = self.forward(mel)
         return audio
+
+def load_hifigan(device='cuda' if torch.cuda.is_available() else 'cpu'):
+    """Load Universal HiFi-GAN vocoder"""
+    model = HiFiGAN()
+    
+    # Initialize with default parameters
+    model.eval()
+    model.to(device)
+    
+    print("Using default HiFi-GAN vocoder")
+    return model

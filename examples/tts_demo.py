@@ -1,0 +1,58 @@
+"""
+Demo script showing how to use the Kenyan Swahili TTS model
+"""
+import os
+import sys
+from pathlib import Path
+
+# Add src directory to Python path
+src_dir = Path(__file__).parent.parent / 'src'
+sys.path.append(str(src_dir))
+
+import torch
+import torchaudio
+from pathlib import Path
+
+from preprocessor import TextPreprocessor, SwahiliTokenizer
+from model import FastSpeech2
+from vocoder import load_hifigan
+from inference import synthesize, load_model
+
+def main():
+    # Model paths - update these with your model paths
+    checkpoint_path = "checkpoints/best.pt"  # FastSpeech2 model
+    tokenizer_path = "data/tokenizer/tokenizer.model"  # SentencePiece tokenizer
+    
+    # Set device
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(f"Using device: {device}")
+    
+    # Initialize models
+    tokenizer = SwahiliTokenizer()
+    tokenizer.load(tokenizer_path)
+    preprocessor = TextPreprocessor(tokenizer)
+    
+    model = load_model(checkpoint_path, device)
+    print("Loaded TTS model")
+    
+    vocoder = load_hifigan(device)
+    print("Loaded HiFi-GAN vocoder")
+    
+    # Example text
+    text = "Karibu Nyumbani."
+    print(f"\nSynthesizing text: '{text}'\n")
+    
+    # Create output directory
+    output_dir = Path("examples/output")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Synthesize speech
+    audio = synthesize(text, model, preprocessor, vocoder, device)
+    
+    # Save audio
+    output_path = output_dir / "output.wav"
+    torchaudio.save(output_path, audio.unsqueeze(0), 22050)
+    print(f"\nSaved audio to: {output_path}")
+
+if __name__ == "__main__":
+    main()
