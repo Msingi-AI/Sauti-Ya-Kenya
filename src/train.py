@@ -99,14 +99,16 @@ class TTSDataset(Dataset):
         wav_file = speaker_dir / f'{clip_id}.wav'
         mel_file = speaker_dir / f'{clip_id}_mel.pt'
 
-        # Load text tokens
+        # Load text tokens - handle as sequence
         with open(text_file, 'r') as f:
-            text = torch.tensor([int(x) for x in f.read().strip().split()])
+            tokens = [int(x) for x in f.read().strip().split()]
+            text = torch.tensor(tokens)  # Shape: [T]
+            print(f"\nLoaded text tokens for {clip_id}: {text.shape}")
         
         # Load mel spectrogram and convert to [T, n_mels]
         mel = torch.load(mel_file)  # Shape: [1, n_mels, T]
         mel = mel.squeeze(0).transpose(0, 1)  # Convert to [T, n_mels]
-        print(f"\nLoaded and processed mel shape for {clip_id}: {mel.shape}")
+        print(f"Loaded and processed mel shape for {clip_id}: {mel.shape}")
         
         # Get duration from metadata
         duration = float(row['duration'])
@@ -119,24 +121,31 @@ def collate_fn(batch):
     texts, mels, durations = zip(*batch)
     
     # Debug shapes
+    print("\nText shapes in batch:")
+    for i, text in enumerate(texts):
+        print(f"Text {i}: {text.shape}")
+    
     print("\nMel shapes in batch:")
     for i, mel in enumerate(mels):
         print(f"Mel {i}: {mel.shape}")
     
     # Get max lengths
-    max_mel_len = max(mel.size(0) for mel in mels)  # Time dimension is first
+    max_text_len = max(text.size(0) for text in texts)
+    max_mel_len = max(mel.size(0) for mel in mels)
+    print(f"Max text length: {max_text_len}")
     print(f"Max mel length: {max_mel_len}")
+    
+    # Pad texts to max length [B, T]
+    text_padded = torch.zeros(len(texts), max_text_len, dtype=torch.long)
+    for i, text in enumerate(texts):
+        text_padded[i, :text.size(0)] = text
     
     # Pad mels to max length [B, T, n_mels]
     mel_padded = torch.zeros(len(mels), max_mel_len, mels[0].size(1))
-    print(f"Padded mel shape: {mel_padded.shape}")
-    
     for i, mel in enumerate(mels):
-        print(f"Copying mel {i} shape {mel.shape} to padded tensor")
         mel_padded[i, :mel.size(0), :] = mel
     
-    # Stack texts and durations
-    text_padded = pad_sequence(texts, batch_first=True, padding_value=0)
+    # Stack durations
     durations = torch.tensor(durations)
     
     return text_padded, mel_padded, durations
