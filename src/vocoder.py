@@ -110,20 +110,30 @@ class Generator(nn.Module):
         x = self.conv_pre(mel)
         print(f"After conv_pre shape: {x.shape}")
         
+        # Normalize activation range
+        x = F.instance_norm(x)
+        
         # Upsample in stages
         for i, up in enumerate(self.ups):
             x = up(x)
+            # Normalize after each upsampling
+            x = F.instance_norm(x)
             print(f"After upsample {i+1} shape: {x.shape}")
         
         # Apply MRF blocks
         for i, mrf in enumerate(self.mrf_blocks):
-            x = x + mrf(x)  # Residual connection
+            x = x + 0.1 * mrf(x)  # Scaled residual connection
             print(f"After MRF {i+1} shape: {x.shape}")
         
         # Final processing
         x = F.leaky_relu(x, 0.1)
         x = self.conv_post(x)
         x = torch.tanh(x)
+        
+        # Scale output to full range [-1, 1]
+        max_val = x.abs().max()
+        if max_val > 0:
+            x = x / max_val
         
         print(f"Final waveform shape: {x.shape}")
         return x
