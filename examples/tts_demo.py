@@ -11,6 +11,7 @@ sys.path.append(str(src_dir))
 
 import torch
 import torchaudio
+import sounddevice as sd
 from pathlib import Path
 
 from preprocessor import TextPreprocessor, SwahiliTokenizer
@@ -49,13 +50,31 @@ def main():
     # Synthesize speech
     audio = synthesize(text, model, preprocessor, vocoder, device)
     
+    # Print audio stats
+    print(f"\nAudio stats:")
+    print(f"Shape: {audio.shape}")
+    print(f"Min: {audio.min().item():.3f}")
+    print(f"Max: {audio.max().item():.3f}")
+    print(f"Mean: {audio.mean().item():.3f}")
+    print(f"Std: {audio.std().item():.3f}")
+    
     # Save audio
     output_path = output_dir / "output.wav"
-    audio = audio.squeeze()  # Remove any extra dimensions
+    audio = audio.squeeze().cpu()  # Remove batch dimension and move to CPU
     if audio.dim() == 1:
         audio = audio.unsqueeze(0)  # Add channels dimension for stereo
-    torchaudio.save(output_path, audio, 22050)
-    print(f"\nSaved audio to: {output_path}")
+    
+    try:
+        torchaudio.save(str(output_path), audio, 22050)
+        print(f"\nSaved audio to: {output_path}")
+        
+        # Try to play the audio
+        print("\nPlaying audio...")
+        sd.play(audio.numpy().T, 22050)
+        sd.wait()  # Wait until audio finishes playing
+        
+    except Exception as e:
+        print(f"Error saving/playing audio: {str(e)}")
 
 if __name__ == "__main__":
     main()
