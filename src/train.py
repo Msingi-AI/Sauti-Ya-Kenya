@@ -103,8 +103,12 @@ class TTSDataset(Dataset):
         with open(text_file, 'r') as f:
             text = torch.tensor([int(x) for x in f.read().strip().split()])
         
-        # Load mel spectrogram - already in [T, n_mels] shape from preprocessor
+        # Load mel spectrogram and ensure correct shape
         mel = torch.load(mel_file)
+        print(f"\nLoaded mel shape for {clip_id}: {mel.shape}")
+        if mel.shape[0] == 80:  # If shape is [n_mels, T]
+            mel = mel.transpose(0, 1)  # Convert to [T, n_mels]
+            print(f"Transposed mel shape: {mel.shape}")
         
         # Get duration from metadata
         duration = float(row['duration'])
@@ -116,12 +120,21 @@ def collate_fn(batch):
     # Separate batch elements
     texts, mels, durations = zip(*batch)
     
+    # Debug shapes
+    print("\nMel shapes in batch:")
+    for i, mel in enumerate(mels):
+        print(f"Mel {i}: {mel.shape}")
+    
     # Get max lengths
     max_mel_len = max(mel.size(0) for mel in mels)  # Time dimension is first
+    print(f"Max mel length: {max_mel_len}")
     
     # Pad mels to max length [B, T, n_mels]
     mel_padded = torch.zeros(len(mels), max_mel_len, mels[0].size(1))
+    print(f"Padded mel shape: {mel_padded.shape}")
+    
     for i, mel in enumerate(mels):
+        print(f"Copying mel {i} shape {mel.shape} to padded tensor")
         mel_padded[i, :mel.size(0), :] = mel
     
     # Stack texts and durations
