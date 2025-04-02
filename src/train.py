@@ -126,10 +126,13 @@ def collate_fn(batch):
     for i, mel in enumerate(mels):
         mel_padded[i, :mel.size(0), :] = mel
     
-    # Stack durations
-    durations = torch.tensor(durations)
+    # Convert durations to tensor and expand to match text length
+    durations_expanded = torch.zeros(len(durations), max_text_len)
+    for i, (text, duration) in enumerate(zip(texts, durations)):
+        avg_duration = duration / text.size(0)  # Distribute duration evenly across text tokens
+        durations_expanded[i, :text.size(0)] = avg_duration
     
-    return text_padded, mel_padded, durations
+    return text_padded, mel_padded, durations_expanded
 
 def create_dataloader(data_dir, metadata_path, tokenizer_path, split='train', batch_size=32, num_workers=4, shuffle=True):
     dataset = TTSDataset(data_dir, metadata_path, tokenizer_path)
