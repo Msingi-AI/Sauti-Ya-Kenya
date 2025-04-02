@@ -21,28 +21,22 @@ from .model import FastSpeech2, TTSLoss
 from .preprocessor import TextPreprocessor, SwahiliTokenizer
 
 class TTSDataset(Dataset):
-    def __init__(self, data_dir, split='train'):
+    """Dataset for TTS training"""
+    def __init__(self, data_dir, metadata_path, tokenizer_path):
         self.data_dir = Path(data_dir)
-        self.split = split
+        self.metadata = pd.read_csv(metadata_path)
         
-        print(f"\nInitializing dataset from: {self.data_dir} (exists: {self.data_dir.exists()})")
+        # Initialize text preprocessor with tokenizer
+        tokenizer = SwahiliTokenizer()
+        tokenizer.load(tokenizer_path)
+        self.preprocessor = TextPreprocessor(tokenizer)
         
-        # Load metadata
-        metadata_file = self.data_dir / 'metadata.csv'
-        print(f"Looking for metadata at: {metadata_file} (exists: {metadata_file.exists()})")
-        if not metadata_file.exists():
-            raise FileNotFoundError(f"Metadata file not found at {metadata_file}")
-            
-        self.metadata = pd.read_csv(metadata_file)
-        print(f"Loaded metadata with {len(self.metadata)} total samples")
-        
-        # Filter out rows where files don't exist
+        # Validate files and filter metadata
         valid_rows = []
         for idx, row in self.metadata.iterrows():
             speaker_id = row['speaker_id']
             clip_id = row['clip_id']
             
-            # Check if required files exist
             speaker_dir = self.data_dir / speaker_id
             text_file = speaker_dir / f'{clip_id}_text.txt'
             wav_file = speaker_dir / f'{clip_id}.wav'
@@ -62,32 +56,16 @@ class TTSDataset(Dataset):
                 
             # List contents of speaker dir if it exists
             if speaker_dir.exists():
-                print("Contents of speaker directory:")
+                print(f"\nContents of {speaker_dir}:")
                 for f in speaker_dir.iterdir():
-                    print(f"  - {f.name}")
-        
-        if not valid_rows:
-            raise RuntimeError(
-                f"No valid samples found in {data_dir}. Each speaker directory should contain:\n"
-                f"1. <clip_id>_text.txt - text tokens\n"
-                f"2. <clip_id>.wav - audio file\n"
-                f"3. <clip_id>_mel.pt - mel spectrogram"
-            )
-        
-        self.metadata = self.metadata.iloc[valid_rows].reset_index(drop=True)
-        print(f"\nFound {len(self.metadata)} valid samples with all required files")
-        
-        # Split data if needed
-        if split == 'train':
-            self.metadata = self.metadata.iloc[:int(len(self.metadata) * 0.9)]
-        else:  # val
-            self.metadata = self.metadata.iloc[int(len(self.metadata) * 0.9):]
-        
-        print(f"{split.capitalize()} set size: {len(self.metadata)}")
-    
+                    print(f" - {f.name}")
+                    
+        self.metadata = self.metadata.iloc[valid_rows]
+        print(f"\nFound {len(self.metadata)} valid samples")
+
     def __len__(self):
         return len(self.metadata)
-    
+
     def __getitem__(self, idx):
         """Get a training sample"""
         row = self.metadata.iloc[idx]
@@ -99,11 +77,14 @@ class TTSDataset(Dataset):
         wav_file = speaker_dir / f'{clip_id}.wav'
         mel_file = speaker_dir / f'{clip_id}_mel.pt'
 
-        # Load text tokens - handle as sequence
+        # Load and tokenize text
         with open(text_file, 'r') as f:
-            tokens = [int(x) for x in f.read().strip().split()]
-            text = torch.tensor(tokens)  # Shape: [T]
-            print(f"\nLoaded text tokens for {clip_id}: {text.shape}")
+            raw_text = f.read().strip()
+            tokens = self.preprocessor.process_text(raw_text)
+            text = torch.tensor(tokens.token_ids)  # Shape: [T]
+            print(f"\nLoaded and tokenized text for {clip_id}: {text.shape}")
+            print(f"Raw text: '{raw_text}'")
+            print(f"Token IDs: {tokens.token_ids}")
         
         # Load mel spectrogram and convert to [T, n_mels]
         mel = torch.load(mel_file)  # Shape: [1, n_mels, T]
@@ -150,8 +131,8 @@ def collate_fn(batch):
     
     return text_padded, mel_padded, durations
 
-def create_dataloader(data_dir, split='train', batch_size=32, num_workers=4, shuffle=True):
-    dataset = TTSDataset(data_dir, split)
+def create_dataloader(data_dir, metadata_path, tokenizer_path, split='train', batch_size=32, num_workers=4, shuffle=True):
+    dataset = TTSDataset(data_dir, metadata_path, tokenizer_path)
     return DataLoader(
         dataset,
         batch_size=batch_size,
@@ -331,6 +312,8 @@ def main():
     parser.add_argument('--save_every', type=int, default=10, help='Save checkpoint every N epochs')
     parser.add_argument('--checkpoint_dir', type=str, default='checkpoints', help='Directory to save checkpoints')
     parser.add_argument('--data_dir', type=str, required=True, help='Directory containing processed data')
+    parser.add_argument('--metadata_path', type=str, required=True, help='Path to metadata CSV file')
+    parser.add_argument('--tokenizer_path', type=str, required=True, help='Path to tokenizer model')
     args = parser.parse_args()
     
     # Set memory optimization
@@ -346,17 +329,9 @@ def main():
         print(f"Memory allocated: {torch.cuda.memory_allocated() / 1024**3:.1f}GB")
         print(f"Memory cached: {torch.cuda.memory_reserved() / 1024**3:.1f}GB")
     
-    # Load tokenizer to get vocab size
-    from .preprocessor import SwahiliTokenizer
-    tokenizer = SwahiliTokenizer()
-    tokenizer_path = os.path.join('data', 'tokenizer', 'tokenizer.model')  
-    if not os.path.exists(tokenizer_path):
-        raise RuntimeError(f"Tokenizer not found at {tokenizer_path}")
-    tokenizer.load(tokenizer_path)
-    
     # Initialize datasets
-    train_loader = create_dataloader(args.data_dir, split='train', batch_size=min(args.batch_size, 4), num_workers=2 if torch.cuda.is_available() else 0)
-    val_loader = create_dataloader(args.data_dir, split='val', batch_size=min(args.batch_size, 4), num_workers=2 if torch.cuda.is_available() else 0, shuffle=False)
+    train_loader = create_dataloader(args.data_dir, args.metadata_path, args.tokenizer_path, split='train', batch_size=min(args.batch_size, 4), num_workers=2 if torch.cuda.is_available() else 0)
+    val_loader = create_dataloader(args.data_dir, args.metadata_path, args.tokenizer_path, split='val', batch_size=min(args.batch_size, 4), num_workers=2 if torch.cuda.is_available() else 0, shuffle=False)
     
     print(f"Data directory: {args.data_dir}")
     print(f"Training samples: {len(train_loader.dataset)}")
@@ -366,7 +341,7 @@ def main():
     
     # Initialize model
     model = FastSpeech2(
-        vocab_size=tokenizer.vocab_size,
+        vocab_size=SwahiliTokenizer().vocab_size,
         d_model=384,
         n_enc_layers=4,
         n_dec_layers=4,
