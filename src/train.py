@@ -89,24 +89,26 @@ class TTSDataset(Dataset):
         return len(self.metadata)
     
     def __getitem__(self, idx):
+        """Get a training sample"""
         row = self.metadata.iloc[idx]
         speaker_id = row['speaker_id']
         clip_id = row['clip_id']
         
-        # Get paths
         speaker_dir = self.data_dir / speaker_id
         text_file = speaker_dir / f'{clip_id}_text.txt'
+        wav_file = speaker_dir / f'{clip_id}.wav'
         mel_file = speaker_dir / f'{clip_id}_mel.pt'
-        
+
         # Load text tokens
         with open(text_file, 'r') as f:
-            text = torch.tensor([int(t) for t in f.read().strip().split()]).long()
+            text = torch.tensor([int(x) for x in f.read().strip().split()])
         
-        # Load pre-computed mel spectrogram
-        mel = torch.load(mel_file)
+        # Load mel spectrogram
+        mel = torch.load(mel_file)  # Shape: [n_mels, T]
+        mel = mel.transpose(0, 1)   # Shape: [T, n_mels]
         
-        # Calculate durations (placeholder - equal durations)
-        duration = torch.ones(len(text)).long()
+        # Get duration from metadata
+        duration = float(row['duration'])
         
         return text, mel, duration
 
@@ -116,12 +118,12 @@ def collate_fn(batch):
     texts, mels, durations = zip(*batch)
     
     # Get max lengths
-    max_mel_len = max(mel.size(1) for mel in mels)
+    max_mel_len = max(mel.size(0) for mel in mels)  # Time dimension is first
     
-    # Pad mels to max length
-    mel_padded = torch.zeros(len(mels), mels[0].size(0), max_mel_len)
+    # Pad mels to max length [B, T, n_mels]
+    mel_padded = torch.zeros(len(mels), max_mel_len, mels[0].size(1))
     for i, mel in enumerate(mels):
-        mel_padded[i, :, :mel.size(1)] = mel
+        mel_padded[i, :mel.size(0), :] = mel
     
     # Stack texts and durations
     text_padded = pad_sequence(texts, batch_first=True, padding_value=0)
