@@ -51,7 +51,11 @@ class Generator(nn.Module):
         self.hop_length = np.prod(upsample_rates)  # Total upsampling factor
         
         # Initial conv to convert mel spectrogram to hidden features
-        self.conv_pre = nn.Conv1d(80, initial_channel, 3, padding=1)
+        self.conv_pre = nn.Sequential(
+            nn.Conv1d(80, initial_channel, 7, padding=3),
+            nn.ReLU(),
+            nn.Conv1d(initial_channel, initial_channel, 3, padding=1)
+        )
         
         # Upsample to audio sample rate
         self.ups = nn.ModuleList()
@@ -68,7 +72,8 @@ class Generator(nn.Module):
                         curr_channel, curr_channel // 2,
                         u_k, stride=u_rate,
                         padding=padding
-                    )
+                    ),
+                    nn.Tanh()  # Add non-linearity after each upsampling
                 )
             )
             curr_channel //= 2
@@ -80,7 +85,11 @@ class Generator(nn.Module):
         ])
         
         # Final conv to generate waveform
-        self.conv_post = nn.Conv1d(curr_channel, 1, 3, padding=1)
+        self.conv_post = nn.Sequential(
+            nn.Conv1d(curr_channel, curr_channel, 7, padding=3),
+            nn.Tanh(),
+            nn.Conv1d(curr_channel, 1, 7, padding=3)
+        )
         
     def forward(self, mel: torch.Tensor) -> torch.Tensor:
         """
@@ -99,11 +108,13 @@ class Generator(nn.Module):
         # Print shapes for debugging
         print(f"\nVocoder input shape: {mel.shape}")
         
-        # Ensure minimum input length
-        min_length = 8  # Minimum length needed for upsampling
+        # Ensure minimum input length and pad for smoother transitions
+        min_length = 16  # Minimum length needed for upsampling
         if mel.size(-1) < min_length:
             pad_length = min_length - mel.size(-1)
-            mel = F.pad(mel, (0, pad_length), mode='replicate')
+            left_pad = pad_length // 2
+            right_pad = pad_length - left_pad
+            mel = F.pad(mel, (left_pad, right_pad), mode='reflect')
             print(f"Padded mel shape: {mel.shape}")
         
         # Generate waveform
@@ -120,20 +131,18 @@ class Generator(nn.Module):
             x = F.instance_norm(x)
             print(f"After upsample {i+1} shape: {x.shape}")
         
-        # Apply MRF blocks
+        # Apply MRF blocks with weighted residual connections
+        mrf_out = 0
         for i, mrf in enumerate(self.mrf_blocks):
-            x = x + 0.1 * mrf(x)  # Scaled residual connection
+            mrf_out = mrf_out + mrf(x)
             print(f"After MRF {i+1} shape: {x.shape}")
+        x = x + 0.1 * mrf_out  # Weighted residual
         
         # Final processing
-        x = F.leaky_relu(x, 0.1)
         x = self.conv_post(x)
-        x = torch.tanh(x)
         
-        # Scale output to full range [-1, 1]
-        max_val = x.abs().max()
-        if max_val > 0:
-            x = x / max_val
+        # Normalize output to [-1, 1] range with soft clipping
+        x = torch.tanh(x)
         
         print(f"Final waveform shape: {x.shape}")
         return x

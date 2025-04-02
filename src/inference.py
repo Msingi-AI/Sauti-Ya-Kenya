@@ -14,9 +14,9 @@ def load_model(checkpoint_path: str, device: str = 'cpu') -> FastSpeech2:
     """
     Load FastSpeech2 model from checkpoint
     """
-    # Initialize model
+    # Initialize model with correct vocab size
     model = FastSpeech2(
-        vocab_size=32000,  # SentencePiece vocab size
+        vocab_size=8000,   # Match SentencePiece tokenizer vocab size
         d_model=384,
         n_enc_layers=4,    # Encoder layers
         n_dec_layers=4,    # Decoder layers
@@ -30,56 +30,64 @@ def load_model(checkpoint_path: str, device: str = 'cpu') -> FastSpeech2:
     # Load checkpoint
     checkpoint = torch.load(checkpoint_path, map_location=device)
     
-    # Initialize missing parameters with defaults
-    model_dict = model.state_dict()
-    pretrained_dict = {}
-    
     # Handle different checkpoint formats
-    state_dict = checkpoint.get('model_state_dict', checkpoint)
-    if isinstance(state_dict, dict):
-        for k, v in state_dict.items():
-            # Remove 'module.' prefix if present (from DataParallel)
-            if k.startswith('module.'):
-                k = k[7:]
-                
-            if k in model_dict:
-                if model_dict[k].shape == v.shape:
-                    pretrained_dict[k] = v
-                else:
-                    print(f"Shape mismatch for {k}: model={model_dict[k].shape}, checkpoint={v.shape}")
-            else:
-                print(f"Ignoring checkpoint parameter {k} - not used in model")
+    if isinstance(checkpoint, dict):
+        state_dict = checkpoint.get('model_state_dict', checkpoint)
+    else:
+        state_dict = checkpoint
     
-    # Update model parameters
-    model_dict.update(pretrained_dict)
-    model.load_state_dict(model_dict, strict=False)
+    # Clean up state dict
+    cleaned_state_dict = {}
+    for k, v in state_dict.items():
+        # Remove 'module.' prefix if present (from DataParallel)
+        if k.startswith('module.'):
+            k = k[7:]
+        cleaned_state_dict[k] = v
+    
+    # Load cleaned state dict
+    missing_keys, unexpected_keys = model.load_state_dict(cleaned_state_dict, strict=False)
+    
+    if missing_keys:
+        print("Missing keys:", missing_keys)
+    if unexpected_keys:
+        print("Unexpected keys:", unexpected_keys)
     
     model = model.to(device)
-    model.eval()
+    model.eval()  # Set to evaluation mode
     
     return model
 
 def synthesize(text: str, model: FastSpeech2, preprocessor: TextPreprocessor, 
-               vocoder, device: str = 'cpu'):
-    """Synthesize speech from text"""
+               vocoder, device: str = 'cpu') -> torch.Tensor:
+    """
+    Synthesize speech from text
+    Args:
+        text: Input text
+        model: FastSpeech2 model
+        preprocessor: Text preprocessor
+        vocoder: HiFi-GAN vocoder
+        device: Device to run inference on
+    Returns:
+        audio: Audio waveform tensor
+    """
     # Preprocess text
+    print(f"\nProcessing text: '{text}'")
     tokens = preprocessor.process_text(text)
-    text_tensor = torch.tensor(tokens.token_ids).unsqueeze(0).to(device)  # [1, T]
+    print(f"Token IDs: {tokens.token_ids}")
     
+    # Convert to tensor
+    src = torch.tensor(tokens.token_ids).unsqueeze(0).to(device)  # [1, T]
     print(f"\nFastSpeech2 input shapes:")
-    print(f"src: {text_tensor.shape}")
+    print(f"src: {src.shape}")
     
     # Generate mel spectrogram
     with torch.no_grad():
-        print(f"\nEncoder input shape: {text_tensor.shape}")
-        mel_output, _ = model(text_tensor)  # [1, T', 80]
-        print(f"Mel output shape: {mel_output.shape}")
+        mel_output = model(src)
     
-    # Generate waveform
+    # Convert to audio
     with torch.no_grad():
-        audio = vocoder(mel_output)  # [1, T'']
-        print(f"Audio output shape: {audio.shape}")
-        
+        audio = vocoder(mel_output)
+    
     return audio.squeeze(0).cpu()
 
 def main():

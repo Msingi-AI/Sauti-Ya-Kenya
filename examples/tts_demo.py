@@ -40,7 +40,7 @@ def main():
     print("Loaded HiFi-GAN vocoder")
     
     # Example text
-    text = "Karibu Nyumbani."
+    text = "Karibu nyumbani kwetu. Tutakuonyesha vitu vizuri."
     print(f"\nSynthesizing text: '{text}'\n")
     
     # Create output directory
