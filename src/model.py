@@ -224,6 +224,7 @@ class Decoder(nn.Module):
         return mel_output
 
 class FastSpeech2(nn.Module):
+    """FastSpeech2 TTS model"""
     def __init__(self,
                  vocab_size: int,
                  d_model: int = 384,
@@ -231,56 +232,80 @@ class FastSpeech2(nn.Module):
                  n_dec_layers: int = 4,
                  n_heads: int = 2,
                  d_ff: int = 1536,
-                 n_mels: int = 80,
                  dropout: float = 0.1,
+                 n_mels: int = 80,
                  max_len: int = 10000):
         super().__init__()
         
+        # Embedding layer
+        self.embedding = nn.Embedding(vocab_size, d_model)
+        
+        # Encoder
         self.encoder = Encoder(
-            vocab_size=vocab_size,
             d_model=d_model,
             n_layers=n_enc_layers,
-            n_head=n_heads,
+            n_heads=n_heads,
             d_ff=d_ff,
             dropout=dropout,
             max_len=max_len
         )
         
+        # Length regulator
         self.length_regulator = LengthRegulator(d_model)
         
+        # Decoder
         self.decoder = Decoder(
             d_model=d_model,
             n_layers=n_dec_layers,
-            n_head=n_heads,
+            n_heads=n_heads,
             d_ff=d_ff,
-            n_mels=n_mels,
             dropout=dropout,
             max_len=max_len
         )
-
-    def forward(self,
-                src: torch.Tensor,
-                duration_target: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+        
+        # Mel-spectrogram projection
+        self.mel_linear = nn.Linear(d_model, n_mels)
+        
+    def forward(self, src: torch.Tensor, 
+                duration_target: Optional[torch.Tensor] = None) -> torch.Tensor:
+        """
+        Forward pass
+        Args:
+            src: Source tokens (B, T)
+            duration_target: Duration targets for training (B, T) or None for inference
+        Returns:
+            mel_output: Mel-spectrogram (B, T', n_mels)
+        """
+        # Print input shapes
         print("\nFastSpeech2 input shapes:")
         print(f"src: {src.shape}")
-        if duration_target is not None:
-            print(f"duration_target: {duration_target.shape}")
         
-        # Encode input sequence
-        encoder_output = self.encoder(src)
-        print(f"\nEncoder output shape: {encoder_output.shape}")
+        # Embedding
+        x = self.embedding(src)  # [B, T, d_model]
+        print("After embedding shape:", x.shape)
+        
+        # Encode
+        print("\nEncoder input shape:", x.shape)
+        x = self.encoder(x)
+        print("Encoder output shape:", x.shape)
         
         # Length regulation
-        length_regulated, duration_pred = self.length_regulator(encoder_output, duration_target)
-        print(f"\nAfter length regulation shapes:")
-        print(f"length_regulated: {length_regulated.shape}")
+        print("\nAfter length regulation shapes:")
+        x, duration_pred = self.length_regulator(x, duration_target)
+        print(f"length_regulated: {x.shape}")
         print(f"duration_pred: {duration_pred.shape}")
         
-        # Decode to generate mel spectrogram
-        mel_output = self.decoder(length_regulated)
-        print(f"\nDecoder output shape: {mel_output.shape}")
+        # Decode
+        print("\nDecoder input shape:", x.shape)
+        x = self.decoder(x)
+        print("After final norm shape:", x.shape)
         
-        return mel_output, duration_pred
+        # Project to mel-spectrogram
+        mel_output = self.mel_linear(x)  # [B, T', 80]
+        mel_output = mel_output.transpose(1, 2)  # [B, 80, T']
+        print("Final mel output shape:", mel_output.shape)
+        
+        return mel_output
 
 class TTSLoss(nn.Module):
     def __init__(self):

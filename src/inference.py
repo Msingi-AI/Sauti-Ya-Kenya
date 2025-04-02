@@ -82,13 +82,15 @@ def synthesize(text: str, model: FastSpeech2, preprocessor: TextPreprocessor,
     
     # Generate mel spectrogram
     with torch.no_grad():
-        mel_output = model(src)
+        mel_output = model(src)  # [1, 80, T']
+        print(f"Mel output shape: {mel_output.shape}")
     
     # Convert to audio
     with torch.no_grad():
-        audio = vocoder(mel_output)
+        audio = vocoder(mel_output)  # [1, 1, T'']
+        print(f"Audio output shape: {audio.shape}")
     
-    return audio.squeeze(0).cpu()
+    return audio.squeeze(0).cpu()  # Return [1, T''] tensor
 
 def main():
     parser = argparse.ArgumentParser(description="Kenyan Swahili TTS Inference")
