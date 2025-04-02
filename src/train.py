@@ -111,24 +111,23 @@ class TTSDataset(Dataset):
         return text, mel, duration
 
 def collate_fn(batch):
-    """Create mini-batch tensors from a list of (text, mel, duration) tuples.
-    """
-    # Sort batch by text length
-    batch.sort(key=lambda x: len(x[0]), reverse=True)
-    
-    # Separate inputs
+    """Collate function for dataloader that handles variable length sequences"""
+    # Separate batch elements
     texts, mels, durations = zip(*batch)
     
-    # Get lengths
-    text_lengths = [len(x) for x in texts]
-    mel_lengths = [x.size(0) for x in mels]
+    # Get max lengths
+    max_mel_len = max(mel.size(1) for mel in mels)
     
-    # Pad sequences
+    # Pad mels to max length
+    mel_padded = torch.zeros(len(mels), mels[0].size(0), max_mel_len)
+    for i, mel in enumerate(mels):
+        mel_padded[i, :, :mel.size(1)] = mel
+    
+    # Stack texts and durations
     text_padded = pad_sequence(texts, batch_first=True, padding_value=0)
-    mel_padded = pad_sequence(mels, batch_first=True, padding_value=0)
-    duration_padded = pad_sequence(durations, batch_first=True, padding_value=0)
+    durations = torch.tensor(durations)
     
-    return text_padded, mel_padded, duration_padded
+    return text_padded, mel_padded, durations
 
 def create_dataloader(data_dir, split='train', batch_size=32, num_workers=4, shuffle=True):
     dataset = TTSDataset(data_dir, split)
