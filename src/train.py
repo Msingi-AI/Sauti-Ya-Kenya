@@ -103,9 +103,8 @@ class TTSDataset(Dataset):
         with open(text_file, 'r') as f:
             text = torch.tensor([int(x) for x in f.read().strip().split()])
         
-        # Load mel spectrogram
-        mel = torch.load(mel_file)  # Shape: [n_mels, T]
-        mel = mel.transpose(0, 1)   # Shape: [T, n_mels]
+        # Load mel spectrogram - already in [T, n_mels] shape from preprocessor
+        mel = torch.load(mel_file)
         
         # Get duration from metadata
         duration = float(row['duration'])
