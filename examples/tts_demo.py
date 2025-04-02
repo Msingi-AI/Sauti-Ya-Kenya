@@ -51,7 +51,10 @@ def main():
     
     # Save audio
     output_path = output_dir / "output.wav"
-    torchaudio.save(output_path, audio.unsqueeze(0), 22050)
+    audio = audio.squeeze()  # Remove any extra dimensions
+    if audio.dim() == 1:
+        audio = audio.unsqueeze(0)  # Add channels dimension for stereo
+    torchaudio.save(output_path, audio, 22050)
     print(f"\nSaved audio to: {output_path}")
 
 if __name__ == "__main__":
