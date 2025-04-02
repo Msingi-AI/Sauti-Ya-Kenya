@@ -74,44 +74,54 @@ class LengthRegulator(nn.Module):
         self.length_layer = nn.Linear(384, 1)  # d_model -> 1
         self.max_len = max_len
         
-    def forward(self, x: torch.Tensor, duration_target: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor, duration_target: Optional[torch.Tensor] = None):
+        """
+        Args:
+            x: Input tensor [B, T, C]
+            duration_target: Duration target [B, T] or None
+        Returns:
+            expanded: Expanded tensor [B, T', C]
+            duration_pred: Predicted durations [B, T]
+        """
         print(f"\nLengthRegulator input shapes:")
         print(f"x: {x.shape}")
-        if duration_target is not None:
-            print(f"duration_target: {duration_target.shape}")
+        print(f"duration_target: {duration_target.shape if duration_target is not None else None}")
         
         # Predict duration if not provided
-        log_duration_pred = self.length_layer(x)
-        duration_pred = torch.exp(log_duration_pred) - 1
+        log_duration_pred = self.length_layer(x)  # [B, T, 1]
+        duration_pred = torch.exp(log_duration_pred.squeeze(-1))  # [B, T]
         
-        if duration_target is None:
-            duration_rounded = torch.round(duration_pred)
-        else:
-            duration_rounded = duration_target
-            
-        # Calculate total expanded length
-        expanded_len = int(duration_rounded.sum().item())
-        if expanded_len > self.max_len:
+        # Use predicted or target duration
+        duration_rounded = duration_target if duration_target is not None else torch.round(duration_pred)
+        
+        # Calculate total expanded length for each sequence
+        expanded_lens = duration_rounded.sum(dim=1)  # [B]
+        max_expanded_len = int(expanded_lens.max().item())
+        
+        if max_expanded_len > self.max_len:
             # Scale down durations to fit max_len
-            scale_factor = self.max_len / expanded_len
+            scale_factor = self.max_len / max_expanded_len
             duration_rounded = torch.floor(duration_rounded * scale_factor)
-            print(f"Warning: Expanded length {expanded_len} exceeds maximum length {self.max_len}. Scaling durations.")
-            expanded_len = int(duration_rounded.sum().item())
+            print(f"Warning: Max expanded length {max_expanded_len} exceeds maximum length {self.max_len}. Scaling durations.")
+            max_expanded_len = self.max_len
             
         # Expand according to duration
-        expanded = torch.zeros(x.size(0), expanded_len, x.size(2)).to(x.device)
-        current_pos = 0
-        for i in range(x.size(1)):
-            expanded_size = int(duration_rounded[:, i].sum().item())
-            if expanded_size > 0:
-                expanded[:, current_pos:current_pos + expanded_size] = x[:, i:i+1].expand(-1, expanded_size, -1)
-                current_pos += expanded_size
+        batch_size, seq_len, channels = x.shape
+        expanded = torch.zeros(batch_size, max_expanded_len, channels).to(x.device)
+        
+        for b in range(batch_size):
+            current_pos = 0
+            for t in range(seq_len):
+                expanded_size = int(duration_rounded[b, t].item())
+                if expanded_size > 0:
+                    expanded[b, current_pos:current_pos + expanded_size] = x[b, t:t+1].expand(expanded_size, -1)
+                    current_pos += expanded_size
         
         print(f"\nLengthRegulator output shapes:")
         print(f"expanded: {expanded.shape}")
-        print(f"duration_pred: {duration_pred.squeeze(-1).shape}")
+        print(f"duration_pred: {duration_pred.shape}")
                 
-        return expanded, duration_pred.squeeze(-1)
+        return expanded, duration_pred
 
 class Encoder(nn.Module):
     def __init__(self,
