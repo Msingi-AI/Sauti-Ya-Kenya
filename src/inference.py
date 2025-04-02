@@ -10,30 +10,48 @@ from preprocessor import TextPreprocessor, SwahiliTokenizer
 from model import FastSpeech2
 from vocoder import load_hifigan
 
-def load_model(checkpoint_path: str, device: str = 'cuda' if torch.cuda.is_available() else 'cpu'):
-    """Load trained FastSpeech2 model"""
+def load_model(checkpoint_path: str, device: str = 'cpu') -> FastSpeech2:
+    """
+    Load FastSpeech2 model from checkpoint
+    """
+    # Initialize model
+    model = FastSpeech2(
+        vocab_size=32000,  # SentencePiece vocab size
+        d_model=384,
+        n_layers=4,
+        n_heads=2,
+        d_inner=1536,
+        max_len=10000,
+        n_bins=256
+    )
+    
+    # Load checkpoint
     checkpoint = torch.load(checkpoint_path, map_location=device)
     
-    # Create model with same parameters as training
-    model = FastSpeech2(
-        vocab_size=8000,  # SentencePiece vocab size
-        d_model=384,      # Model dimension
-        n_enc_layers=4,   # Encoder layers
-        n_dec_layers=4,   # Decoder layers
-        n_heads=2,        # Attention heads
-        d_ff=1536,        # Feed-forward dimension
-        n_mels=80,        # Mel spectrogram bins
-        dropout=0.1,      # Dropout rate
-        max_len=10000     # Maximum sequence length
-    ).to(device)
+    # Initialize missing parameters with defaults
+    model_dict = model.state_dict()
+    pretrained_dict = {}
     
-    # Load trained weights
-    model.load_state_dict(checkpoint['model_state_dict'])
+    for k, v in checkpoint['model'].items():
+        if k in model_dict:
+            if model_dict[k].shape == v.shape:
+                pretrained_dict[k] = v
+            else:
+                print(f"Shape mismatch for {k}: model={model_dict[k].shape}, checkpoint={v.shape}")
+        else:
+            print(f"Ignoring checkpoint parameter {k} - not used in model")
+    
+    # Update model parameters
+    model_dict.update(pretrained_dict)
+    model.load_state_dict(model_dict, strict=False)
+    
+    model = model.to(device)
     model.eval()
+    
     return model
 
 def synthesize(text: str, model: FastSpeech2, preprocessor: TextPreprocessor, 
-               vocoder, device: str = 'cuda' if torch.cuda.is_available() else 'cpu'):
+               vocoder, device: str = 'cpu'):
     """Synthesize speech from text"""
     # Preprocess text
     tokens = preprocessor.process_text(text)
