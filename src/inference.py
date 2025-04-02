@@ -34,14 +34,21 @@ def load_model(checkpoint_path: str, device: str = 'cpu') -> FastSpeech2:
     model_dict = model.state_dict()
     pretrained_dict = {}
     
-    for k, v in checkpoint['model'].items():
-        if k in model_dict:
-            if model_dict[k].shape == v.shape:
-                pretrained_dict[k] = v
+    # Handle different checkpoint formats
+    state_dict = checkpoint.get('model_state_dict', checkpoint)
+    if isinstance(state_dict, dict):
+        for k, v in state_dict.items():
+            # Remove 'module.' prefix if present (from DataParallel)
+            if k.startswith('module.'):
+                k = k[7:]
+                
+            if k in model_dict:
+                if model_dict[k].shape == v.shape:
+                    pretrained_dict[k] = v
+                else:
+                    print(f"Shape mismatch for {k}: model={model_dict[k].shape}, checkpoint={v.shape}")
             else:
-                print(f"Shape mismatch for {k}: model={model_dict[k].shape}, checkpoint={v.shape}")
-        else:
-            print(f"Ignoring checkpoint parameter {k} - not used in model")
+                print(f"Ignoring checkpoint parameter {k} - not used in model")
     
     # Update model parameters
     model_dict.update(pretrained_dict)
