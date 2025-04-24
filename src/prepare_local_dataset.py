@@ -51,6 +51,15 @@ def prepare_dataset(
     durations_df = pd.read_csv(durations_path, sep='\t')
     durations_df['duration'] = durations_df['duration[ms]'] / 1000.0
     durations_df['clip_id'] = durations_df['clip'].apply(lambda x: x.replace('.mp3', '').split('_')[-1])
+    # Load sentences file and create a mapping from clip name to sentence
+    sentences_path = os.path.join(dataset_path, sentences_file)
+    sentences_df = pd.read_csv(sentences_path, sep='\t')
+    # Try to find the column with the clip name and the sentence
+    clip_col = 'path' if 'path' in sentences_df.columns else 'clip' if 'clip' in sentences_df.columns else None
+    sentence_col = 'sentence' if 'sentence' in sentences_df.columns else None
+    if clip_col is None or sentence_col is None:
+        raise ValueError("Could not find clip or sentence columns in validated_sentences.tsv")
+    clip_to_sentence = dict(zip(sentences_df[clip_col], sentences_df[sentence_col]))
     all_metadata = []
     for idx, row in tqdm(durations_df.iterrows(), total=len(durations_df)):
         try:
@@ -62,6 +71,8 @@ def prepare_dataset(
             speaker_dir = os.path.join(output_dir, f"Speaker_{idx:03d}")
             os.makedirs(speaker_dir, exist_ok=True)
             save_path = os.path.join(speaker_dir, f"clip_{idx:04d}")
+            # Get real sentence transcription if available
+            sentence = clip_to_sentence.get(row['clip'], row['clip_id'])
             torch.save(mel_spec, save_path + '_mel.pt')
             torchaudio.save(
                 save_path + '.wav',
@@ -71,11 +82,11 @@ def prepare_dataset(
                 bits_per_sample=16
             )
             with open(save_path + '_text.txt', 'w', encoding='utf-8') as f:
-                f.write(row['clip_id'])
+                f.write(str(sentence))
             all_metadata.append({
                 'speaker_id': f"Speaker_{idx:03d}",
                 'clip_id': f"clip_{idx:04d}",
-                'text': row['clip_id'],
+                'text': str(sentence),
                 'duration': float(row['duration']),
                 'mel_frames': mel_spec.shape[1],
                 'original_path': row['clip']
