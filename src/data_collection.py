@@ -1,6 +1,3 @@
-"""
-Data collection tool for Kenyan Swahili TTS
-"""
 import tkinter as tk
 from tkinter import ttk, messagebox
 import sounddevice as sd
@@ -16,7 +13,7 @@ import wave
 from typing import Optional, Dict, List
 
 class AudioRecorder:
-    def __init__(self, sample_rate: int = 22050):
+    def __init__(self, sample_rate=22050):
         self.sample_rate = sample_rate
         self.recording = False
         self.audio_data = []
@@ -39,14 +36,13 @@ class AudioRecorder:
         )
         self.stream.start()
 
-    def stop_recording(self) -> np.ndarray:
+    def stop_recording(self):
         self.recording = False
         if self.stream:
             self.stream.stop()
             self.stream.close()
             self.stream = None
 
-        # Collect all audio data from queue
         while not self.audio_queue.empty():
             self.audio_data.append(self.audio_queue.get())
 
@@ -56,17 +52,15 @@ class AudioRecorder:
         return np.concatenate(self.audio_data, axis=0)
 
 class DataCollectionApp:
-    def __init__(self, root: tk.Tk):
+    def __init__(self, root):
         self.root = root
         self.root.title("Kenyan Swahili TTS Data Collection")
         self.root.geometry("800x600")
 
-        # Initialize recorder
         self.recorder = AudioRecorder()
-        self.current_recording: Optional[np.ndarray] = None
-        self.metadata: Dict = {}
+        self.current_recording = None
+        self.metadata = {}
         
-        # Create base paths
         self.data_dir = Path("data")
         self.recordings_dir = self.data_dir / "recordings"
         self.metadata_file = self.data_dir / "metadata.json"
@@ -76,7 +70,6 @@ class DataCollectionApp:
         self.setup_ui()
 
     def create_directories(self):
-        """Create necessary directories"""
         self.recordings_dir.mkdir(parents=True, exist_ok=True)
         
         if not self.metadata_file.exists():
@@ -84,7 +77,6 @@ class DataCollectionApp:
                 json.dump({}, f)
 
     def load_metadata(self):
-        """Load existing metadata"""
         try:
             with open(self.metadata_file, "r") as f:
                 self.metadata = json.load(f)
@@ -92,13 +84,10 @@ class DataCollectionApp:
             self.metadata = {}
 
     def save_metadata(self):
-        """Save metadata to file"""
         with open(self.metadata_file, "w") as f:
             json.dump(self.metadata, f, indent=2)
 
     def setup_ui(self):
-        """Setup the user interface"""
-        # Speaker Info Frame
         speaker_frame = ttk.LabelFrame(self.root, text="Speaker Information", padding=10)
         speaker_frame.pack(fill="x", padx=10, pady=5)
 
@@ -118,14 +107,12 @@ class DataCollectionApp:
         self.dialect = ttk.Entry(speaker_frame)
         self.dialect.grid(row=3, column=1, sticky="ew")
 
-        # Text Frame
         text_frame = ttk.LabelFrame(self.root, text="Recording Text", padding=10)
         text_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
         self.text_input = tk.Text(text_frame, height=5)
         self.text_input.pack(fill="both", expand=True)
 
-        # Recording Controls Frame
         controls_frame = ttk.Frame(self.root, padding=10)
         controls_frame.pack(fill="x", padx=10, pady=5)
 
@@ -152,7 +139,6 @@ class DataCollectionApp:
         )
         self.save_button.pack(side="left", padx=5)
 
-        # Status Frame
         status_frame = ttk.Frame(self.root, padding=10)
         status_frame.pack(fill="x", padx=10, pady=5)
 
@@ -163,7 +149,6 @@ class DataCollectionApp:
         )
         self.status_label.pack(fill="x")
 
-        # Progress Bar
         self.progress_var = tk.DoubleVar(value=0)
         self.progress = ttk.Progressbar(
             status_frame,
@@ -173,23 +158,18 @@ class DataCollectionApp:
         self.progress.pack(fill="x", pady=5)
 
     def toggle_recording(self):
-        """Toggle recording state"""
         if not self.recorder.recording:
-            # Validate inputs
             if not self.validate_inputs():
                 return
 
-            # Start recording
             self.recorder.start_recording()
             self.record_button.configure(text="Stop Recording")
             self.status_var.set("Recording...")
             self.play_button.configure(state="disabled")
             self.save_button.configure(state="disabled")
             
-            # Start progress update
             self.update_progress()
         else:
-            # Stop recording
             self.current_recording = self.recorder.stop_recording()
             self.record_button.configure(text="Start Recording")
             self.status_var.set("Recording stopped")
@@ -198,7 +178,6 @@ class DataCollectionApp:
             self.progress_var.set(0)
 
     def update_progress(self):
-        """Update progress bar during recording"""
         if self.recorder.recording:
             current = self.progress_var.get()
             if current >= 100:
@@ -206,8 +185,7 @@ class DataCollectionApp:
             self.progress_var.set(current + 1)
             self.root.after(100, self.update_progress)
 
-    def validate_inputs(self) -> bool:
-        """Validate user inputs"""
+    def validate_inputs(self):
         if not self.speaker_id.get():
             messagebox.showerror("Error", "Please enter a Speaker ID")
             return False
@@ -226,7 +204,6 @@ class DataCollectionApp:
         return True
 
     def play_recording(self):
-        """Play the current recording"""
         if self.current_recording is not None:
             try:
                 sd.play(self.current_recording, self.recorder.sample_rate)
@@ -235,24 +212,20 @@ class DataCollectionApp:
                 messagebox.showerror("Error", f"Failed to play recording: {e}")
 
     def save_recording(self):
-        """Save the current recording and metadata"""
         if self.current_recording is None:
             return
 
         try:
-            # Generate filename
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"{self.speaker_id.get()}_{timestamp}.wav"
             filepath = self.recordings_dir / filename
 
-            # Save audio
             with wave.open(str(filepath), 'wb') as wf:
                 wf.setnchannels(1)
                 wf.setsampwidth(2)  # 16-bit
                 wf.setframerate(self.recorder.sample_rate)
                 wf.writeframes((self.current_recording * 32767).astype(np.int16))
 
-            # Save metadata
             metadata_entry = {
                 "speaker_id": self.speaker_id.get(),
                 "gender": self.gender.get(),
@@ -267,7 +240,6 @@ class DataCollectionApp:
             self.metadata[filename] = metadata_entry
             self.save_metadata()
 
-            # Clear recording
             self.current_recording = None
             self.play_button.configure(state="disabled")
             self.save_button.configure(state="disabled")

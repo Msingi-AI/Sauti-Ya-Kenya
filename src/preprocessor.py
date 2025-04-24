@@ -1,6 +1,3 @@
-"""
-Text and audio preprocessing utilities for Kenyan Swahili TTS
-"""
 import re
 import torch
 import numpy as np
@@ -13,27 +10,22 @@ import torchaudio.transforms as T
 
 @dataclass
 class TextTokens:
-    """Container for processed text tokens"""
     token_ids: List[int]
     text: str
     languages: Optional[List[str]] = None
     attention_mask: Optional[List[int]] = None
 
 class SwahiliTokenizer:
-    """SentencePiece-based tokenizer for Swahili text with code-switching support"""
-    def __init__(self, vocab_size: int = 8000, model_path: Optional[str] = None):
+    def __init__(self, vocab_size=8000, model_path=None):
         self.vocab_size = vocab_size
         self.sp_model = None
         if model_path:
             self.load(model_path)
 
-    def train(self, texts: List[str], model_prefix: str):
-        """Train the tokenizer on given texts"""
-        # Write texts to temporary file
+    def train(self, texts, model_prefix):
         import tempfile
         with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', delete=False) as f:
             for text in texts:
-                # Duplicate short texts to meet minimum requirement
                 if len(texts) < 100:
                     repeat = max(1, 100 // len(texts) + 1)
                     for _ in range(repeat):
@@ -42,14 +34,13 @@ class SwahiliTokenizer:
                     f.write(text + '\n')
             temp_path = f.name
 
-        # Train SentencePiece model
         spm.SentencePieceTrainer.train(
             input=temp_path,
             model_prefix=model_prefix,
             vocab_size=self.vocab_size,
             character_coverage=1.0,
             model_type='unigram',
-            input_sentence_size=100000,  # Increased to handle more sentences
+            input_sentence_size=100000,
             shuffle_input_sentence=True,
             pad_id=0,
             unk_id=1,
@@ -61,64 +52,51 @@ class SwahiliTokenizer:
             eos_piece='</s>'
         )
 
-        # Load the trained model
         self.load(model_prefix + '.model')
 
-        # Clean up temporary file
         import os
         os.unlink(temp_path)
 
-    def load(self, model_path: str):
-        """Load a trained tokenizer model"""
+    def load(self, model_path):
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.load(model_path)
 
-    def encode(self, text: str) -> List[int]:
-        """Convert text to token IDs"""
+    def encode(self, text):
         if self.sp_model is None:
             raise RuntimeError("Tokenizer model not loaded. Call load() or train() first.")
         return self.sp_model.encode_as_ids(text)
 
-    def decode(self, token_ids: List[int]) -> str:
-        """Convert token IDs to text"""
+    def decode(self, token_ids):
         if self.sp_model is None:
             raise RuntimeError("Tokenizer model not loaded. Call load() or train() first.")
         return self.sp_model.decode_ids(token_ids)
 
 class TextPreprocessor:
-    """Text preprocessing for Kenyan Swahili"""
-    def __init__(self, tokenizer: Optional[SwahiliTokenizer] = None):
+    def __init__(self, tokenizer=None):
         self.tokenizer = tokenizer or SwahiliTokenizer()
         self._init_normalizers()
 
     def _init_normalizers(self):
-        """Initialize text normalization rules"""
-        # Number mapping
         self.number_map = {
             '0': 'sifuri', '1': 'moja', '2': 'mbili', '3': 'tatu',
             '4': 'nne', '5': 'tano', '6': 'sita', '7': 'saba',
             '8': 'nane', '9': 'tisa'
         }
         
-        # Common Kenyan Swahili expressions and their standard forms
         self.expressions = {
-            # Greetings
             "sasa": "hujambo",
             "mambo": "hujambo",
             "niaje": "hujambo",
             "vipi": "hujambo",
             
-            # Common expressions
             "sawa sawa": "sawa",
             "poa": "nzuri",
             "fiti": "nzuri",
             "shwari": "nzuri",
             
-            # Time expressions
             "saa hizi": "sasa",
             "saa ngapi": "saa gani",
             
-            # Sheng expressions
             "maze": "rafiki",
             "manze": "rafiki",
             "bro": "ndugu",
@@ -135,65 +113,41 @@ class TextPreprocessor:
             "nganya": "matatu"
         }
         
-        # Special tokens
-        self.BOS = "[BOS]"  # Beginning of sentence
-        self.EOS = "[EOS]"  # End of sentence
-        self.PAD = "[PAD]"  # Padding token
+        self.BOS = "[BOS]"
+        self.EOS = "[EOS]"
+        self.PAD = "[PAD]"
         
-    def clean_text(self, text: str) -> str:
-        """Basic text cleaning"""
-        # Convert to lowercase
+    def clean_text(self, text):
         text = text.lower().strip()
         
-        # Replace multiple spaces with single space
         text = re.sub(r'\s+', ' ', text)
         
-        # Remove special characters except period and comma
         text = re.sub(r'[^a-z0-9\s\.,]', '', text)
         
         return text
         
-    def normalize_numbers(self, text: str) -> str:
-        """Convert numbers to words"""
+    def normalize_numbers(self, text):
         words = []
         for word in text.split():
             if word.isdigit():
-                # Convert each digit to word
                 number_words = [self.number_map[d] for d in word]
                 words.append(" ".join(number_words))
             else:
                 words.append(word)
         return " ".join(words)
         
-    def normalize_expressions(self, text: str) -> str:
-        """Normalize common expressions"""
+    def normalize_expressions(self, text):
         for expr, norm in self.expressions.items():
             text = re.sub(r'\b' + expr + r'\b', norm, text)
         return text
         
-    def process_text(self, text: str) -> TextTokens:
-        """
-        Process input text
-        Args:
-            text: Input text
-        Returns:
-            TextTokens object containing token IDs and processed text
-        """
-        # Clean and normalize text
+    def process_text(self, text):
         text = self.clean_text(text)
         text = self.normalize_numbers(text)
         text = self.normalize_expressions(text)
         
-        # Add special tokens
         text = f"{self.BOS} {text} {self.EOS}"
         
-        # Print processed text
-        print(f"Processed text: '{text}'")
-        
-        # Tokenize
-        if not self.tokenizer.sp_model:
-            raise ValueError("Tokenizer model not loaded. Call load() first.")
-            
         token_ids = self.tokenizer.sp_model.encode_as_ids(text)
         
         return TextTokens(
@@ -215,27 +169,15 @@ class AudioPreprocessor:
             normalized=True
         )
         
-    def process_audio(self, audio_path: str):
-        """
-        Process audio files for training/inference
-        
-        Args:
-            audio_path: Path to wav file
-            
-        Returns:
-            mel: Mel spectrogram tensor
-        """
-        # Load and resample if needed
+    def process_audio(self, audio_path):
         waveform, sr = torchaudio.load(audio_path)
         if sr != self.sample_rate:
             resampler = T.Resample(sr, self.sample_rate)
             waveform = resampler(waveform)
             
-        # Convert to mono if stereo
         if waveform.size(0) > 1:
             waveform = torch.mean(waveform, dim=0, keepdim=True)
             
-        # Generate mel spectrogram
-        mel = self.mel_transform(waveform).squeeze(0).transpose(0, 1)  # [T, n_mels]
+        mel = self.mel_transform(waveform).squeeze(0).transpose(0, 1)
         
         return mel
