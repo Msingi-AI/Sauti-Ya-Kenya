@@ -6,6 +6,8 @@ import numpy as np
 from pathlib import Path
 from typing import Dict, List, Optional
 from tqdm import tqdm
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from .preprocessor import TextPreprocessor, SwahiliTokenizer
 
