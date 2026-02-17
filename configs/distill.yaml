@@ -22,10 +22,11 @@ student:
   hidden_size: 512
 
 distillation:
-  temperature: 2.0
+  temperature: 3.0
   alpha_hard: 1.0
   alpha_soft: 0.5
   alpha_mel: 1.0
+  vocab_size: 2000
 
 training:
   batch_size: 8

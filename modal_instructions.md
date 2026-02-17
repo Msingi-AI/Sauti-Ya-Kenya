@@ -50,6 +50,7 @@ Notes & recommendations
 
 - GPU selection: prefer `H100` or `A100-80GB` for the teacher precompute step. The runner uses `A100-40GB` by default; change the decorator `gpu(...)` in `modal_run.py` if you need a different GPU.
 - Image: the scaffold uses pip-installed packages. For production, create a custom CUDA-enabled image with a matching PyTorch wheel for the target GPU.
+ - Image: the scaffold uses pip-installed packages. For production, create a custom CUDA-enabled image with a matching PyTorch wheel for the target GPU. A sample `Dockerfile` is included at the repo root; adjust the `torch` wheel line to pin the wheel matching your target CUDA (Modal often documents the recommended wheel per GPU family).
 - Mounts: the mounting strategy in `modal_run.py` uses the current repo directory. This means outputs (checkpoints, activations) will be written into `./checkpoints` on your machine when the Modal job mounts that directory.
 - Secrets: never hardcode tokens; use Modal secrets only.
 
