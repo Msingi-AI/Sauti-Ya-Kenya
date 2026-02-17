@@ -1,0 +1,37 @@
+project:
+  name: "msingi-swahili-distill"
+  output_dir: "./checkpoints/swahili_student_v1"
+  log_interval: 100
+
+data:
+  train_dataset: "google/WaxalNLP"
+  subset: "swa_tts"  # 180 hours of studio-quality Swahili
+  validation_split: 0.05
+  use_pseudo_labels: True
+  pseudo_label_path: "./data/processed/whisper_transcripts.jsonl"
+
+teacher:
+  model_id: "fishaudio/fish-speech-1.5"
+  freeze_weights: True
+  target_layer: -2
+  hidden_size: 1024
+
+student:
+  model_id: "FunAudioLLM/CosyVoice2-0.5B"
+  target_layer: "embedding_output"
+  hidden_size: 512
+
+distillation:
+  temperature: 2.0
+  alpha_hard: 1.0
+  alpha_soft: 0.5
+  alpha_mel: 1.0
+
+training:
+  batch_size: 8
+  grad_accum: 4
+  learning_rate: 1.0e-4
+  scheduler: "linear_warmup"
+  warmup_steps: 1000
+  precision: "fp16"
+  max_epochs: 20
