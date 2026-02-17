@@ -1,0 +1,10 @@
+torch
+transformers
+datasets
+torchaudio
+librosa
+soundfile
+accelerate
+huggingface-hub
+numpy
+scipy
