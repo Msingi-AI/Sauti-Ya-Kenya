@@ -1,47 +1,37 @@
-import os
 import logging
-from datasets import load_dataset, Audio
+from datasets import Audio, load_dataset
+
+from .security import is_remote_code_trusted
 
 logger = logging.getLogger(__name__)
 
-def get_waxal_swahili(split="train", streaming=True):
-    """
-    Load the specific Swahili TTS subset from WAXAL.
-    
-    Args:
-        split (str): 'train', 'validation', or 'test'.
-        streaming (bool): If True, streams data (good for large datasets).
-                          If False, downloads everything (good for caching).
-    
-    Returns:
-        Dataset: The WAXAL Swahili dataset ready for training.
-    """
-    logger.info(f"Loading WAXAL (swa_tts) split={split}...")
-    
+
+def get_waxal_swahili(
+    split: str = "train",
+    streaming: bool = True,
+    dataset_name: str = "google/WaxalNLP",
+    config_name: str = "swa_tts",
+):
+    """Load the Swahili TTS subset from WAXAL."""
+    logger.info("Loading WAXAL split=%s from %s/%s", split, dataset_name, config_name)
+
     try:
-        # Load specifically the 'swa_tts' config
+        trust_remote_code = is_remote_code_trusted(dataset_name)
         ds = load_dataset(
-            "google/WaxalNLP", 
-            "swa_tts", 
-            split=split, 
-            streaming=streaming, 
-            trust_remote_code=True
+            dataset_name,
+            config_name,
+            split=split,
+            streaming=streaming,
+            trust_remote_code=trust_remote_code,
         )
-        
-        # Resample audio to 16kHz (Standard for Fish Speech / CosyVoice)
-        # Note: In streaming mode, casting happens on-the-fly
         ds = ds.cast_column("audio", Audio(sampling_rate=16000))
-        
         return ds
+    except Exception as exc:
+        logger.error("Failed to load WAXAL: %s", exc)
+        raise
 
-    except Exception as e:
-        logger.error(f"Failed to load WAXAL: {e}")
-        raise e
 
-def save_to_disk(ds, output_path):
-    """
-    Helper to save a streaming dataset to disk (for the Volume).
-    """
-    logger.info(f"Saving dataset to {output_path}...")
+def save_to_disk(ds, output_path: str):
+    logger.info("Saving dataset to %s...", output_path)
     ds.save_to_disk(output_path)
     logger.info("Save complete.")

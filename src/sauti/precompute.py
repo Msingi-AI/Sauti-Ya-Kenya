@@ -1,63 +1,67 @@
-import os
-import torch
 import logging
+from pathlib import Path
+
+import torch
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
+
 from .data import get_waxal_swahili
+from .distill_pipeline import append_manifest_record, deterministic_sample_id
+from .security import is_remote_code_trusted
 
 logger = logging.getLogger(__name__)
 
-def precompute_teacher_activations(dataset_name, config_name, out_dir, max_items=2000):
-    """
-    Runs the Teacher Model (Fish Speech) on WAXAL audio/text 
-    and saves the hidden states to disk.
-    """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    logger.info(f"Using device: {device}")
 
-    # 1. Load Teacher (Fish Speech 1.5)
-    TEACHER_ID = "fishaudio/fish-speech-1.5"
-    logger.info(f"Loading Teacher: {TEACHER_ID}")
-    
-    tokenizer = AutoTokenizer.from_pretrained(TEACHER_ID, trust_remote_code=True)
-    teacher = AutoModel.from_pretrained(TEACHER_ID, trust_remote_code=True).to(device)
+def precompute_teacher_activations(dataset_name, config_name, out_dir, max_items=2000, manifest_filename="manifest.jsonl"):
+    """Run the teacher model on dataset samples and persist hidden states + manifest."""
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    teacher_id = "fishaudio/fish-speech-1.5"
+    logger.info("Using device=%s teacher=%s", device, teacher_id)
+
+    tokenizer = AutoTokenizer.from_pretrained(teacher_id, trust_remote_code=is_remote_code_trusted(teacher_id))
+    teacher = AutoModel.from_pretrained(teacher_id, trust_remote_code=is_remote_code_trusted(teacher_id)).to(device)
     teacher.eval()
 
-    # 2. Load Data
-    ds = get_waxal_swahili(split="train", streaming=True)
-    
-    # 3. Processing Loop
-    logger.info(f"Processing {max_items} items...")
+    out_path = Path(out_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+    manifest_path = out_path / manifest_filename
+
+    ds = get_waxal_swahili(split="train", streaming=True, dataset_name=dataset_name, config_name=config_name)
+    logger.info("Processing up to %s items", max_items)
+
     count = 0
-    
     with torch.no_grad():
-        for i, sample in tqdm(enumerate(ds)):
+        for sample in tqdm(ds):
             if count >= max_items:
                 break
-                
-            text = sample['text']
-            uid = f"sample_{i}"
-            save_path = os.path.join(out_dir, f"{uid}.pt")
-            
-            # Skip if already exists (resume capability)
-            if os.path.exists(save_path):
+
+            text = sample.get("text", "")
+            audio = sample.get("audio") or {}
+            audio_path = audio.get("path", "") if isinstance(audio, dict) else ""
+            sample_id = deterministic_sample_id(text=text, audio_path=audio_path)
+            save_path = out_path / f"{sample_id}.pt"
+
+            if save_path.exists():
                 continue
 
-            # Tokenize & Forward Pass
             inputs = tokenizer(text, return_tensors="pt").to(device)
             outputs = teacher(**inputs, output_hidden_states=True)
-            
-            # Extract the specific layer we want to distill (e.g., last layer)
-            # Fish Speech specific: check architecture for correct layer
             hidden_states = outputs.last_hidden_state.cpu()
-            
-            # Save
-            torch.save({
-                "hidden_states": hidden_states,
-                "text": text,
-                "audio_path": sample['audio'].get('path', ''), # Metadata
-            }, save_path)
-            
+
+            torch.save(
+                {
+                    "sample_id": sample_id,
+                    "hidden_states": hidden_states,
+                    "text": text,
+                    "audio_path": audio_path,
+                },
+                save_path,
+            )
+            append_manifest_record(
+                str(manifest_path),
+                sample_id,
+                {"text": text, "audio_path": audio_path, "tensor_file": save_path.name},
+            )
             count += 1
 
-    logger.info(f"Precomputation complete. Saved {count} files to {out_dir}")
+    logger.info("Precomputation complete. Saved %s files to %s", count, out_dir)
