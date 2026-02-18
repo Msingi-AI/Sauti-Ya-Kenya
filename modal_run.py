@@ -1,30 +1,58 @@
 import modal
 import os
 
-app = modal.App("sauti-distill")
+# Build compatibility fallbacks for different modal SDK versions
+app = getattr(modal, "App")("sauti-distill") if hasattr(modal, "App") else getattr(modal, "stub", None)
 
-sauti_volume = modal.Volume.from_name("sauti-volume", create_if_missing=True)
-
-image = (
-    modal.Image.debian_slim()
-    .apt_install("libsndfile1", "ffmpeg")  # <--- CRITICAL FIX
-    .pip_install(
-        "torch", "transformers", "datasets", "torchaudio", "librosa", "soundfile",
-        "accelerate", "huggingface-hub", "numpy", "scipy", "wandb"
-    )
-)
-
+# Try to create or find a Volume; if Volume API is missing, continue without it
+sauti_volume = None
 VOLUME_PATH = "/root/data"
+if hasattr(modal, "Volume"):
+    try:
+        sauti_volume = modal.Volume.from_name("sauti-volume", create_if_missing=True)
+    except Exception:
+        sauti_volume = None
 
-@app.function(
-    image=image,
-    gpu="A100", # Modal will auto-select memory variant, or specify "A100-40GB"
-    secrets=[modal.Secret.from_name("hf-token"), modal.Secret.from_name("wandb")],
-    # Mount local code for imports, but stick data in the Volume
-    mounts=[modal.Mount.from_local_dir(".", remote_path="/root/project")],
-    volumes={VOLUME_PATH: sauti_volume}, # <--- Mounts the persistent drive
-    timeout=3600 # 1 hour timeout for safety
+# Build image (likely present across versions)
+image = modal.Image.debian_slim().apt_install("libsndfile1", "ffmpeg").pip_install(
+    "torch", "transformers", "datasets", "torchaudio", "librosa", "soundfile",
+    "accelerate", "huggingface-hub", "numpy", "scipy", "wandb"
 )
+
+# Prepare decorator kwargs with graceful fallbacks
+decorator_kwargs = {
+    "image": image,
+    "gpu": "A100",
+}
+
+# Secrets
+if hasattr(modal, "Secret") and hasattr(modal.Secret, "from_name"):
+    try:
+        decorator_kwargs["secrets"] = [modal.Secret.from_name("hf-token"), modal.Secret.from_name("wandb")]
+    except Exception:
+        pass
+
+# Mounts
+mounts_obj = None
+if hasattr(modal, "Mount") and hasattr(modal.Mount, "from_local_dir"):
+    try:
+        mounts_obj = [modal.Mount.from_local_dir(".", remote_path="/root/project")]
+        decorator_kwargs["mounts"] = mounts_obj
+    except Exception:
+        mounts_obj = None
+
+# Volumes
+if sauti_volume is not None:
+    try:
+        decorator_kwargs["volumes"] = {VOLUME_PATH: sauti_volume}
+    except Exception:
+        pass
+
+# Timeouts
+decorator_kwargs.setdefault("timeout", 3600)
+
+
+@app.function(**decorator_kwargs)
 def precompute_max_items(max_items: int = 2000):
     """
     Precompute teacher activations and save to the persistent Volume.
@@ -44,20 +72,39 @@ def precompute_max_items(max_items: int = 2000):
     os.makedirs(out_dir, exist_ok=True)
     
     precompute_teacher_activations("google/WaxalNLP", "swa_tts", out_dir=out_dir, max_items=max_items)
-    
-    # Commit the volume to ensure data is saved immediately
-    sauti_volume.commit()
-    print("✅ Volume committed. Data is safe.")
+
+    # Commit the volume if available
+    if sauti_volume is not None and hasattr(sauti_volume, "commit"):
+        try:
+            sauti_volume.commit()
+            print("✅ Volume committed. Data is safe.")
+        except Exception:
+            print("⚠️ Volume commit failed or not supported in this SDK version.")
 
 
-@app.function(
-    image=image,
-    gpu="A100",
-    secrets=[modal.Secret.from_name("hf-token"), modal.Secret.from_name("wandb")],
-    mounts=[modal.Mount.from_local_dir(".", remote_path="/root/project")],
-    volumes={VOLUME_PATH: sauti_volume}, # <--- Mount the SAME volume here
-    timeout=86400 # 24 hours for full training
-)
+decorator_kwargs_full = {
+    "image": image,
+    "gpu": "A100",
+    "timeout": 86400,
+}
+
+if hasattr(modal, "Secret") and hasattr(modal.Secret, "from_name"):
+    try:
+        decorator_kwargs_full["secrets"] = [modal.Secret.from_name("hf-token"), modal.Secret.from_name("wandb")]
+    except Exception:
+        pass
+
+if mounts_obj is not None:
+    decorator_kwargs_full["mounts"] = mounts_obj
+
+if sauti_volume is not None:
+    try:
+        decorator_kwargs_full["volumes"] = {VOLUME_PATH: sauti_volume}
+    except Exception:
+        pass
+
+
+@app.function(**decorator_kwargs_full)
 def run_full_distill():
     """
     Run the full distillation using data from the Volume.
