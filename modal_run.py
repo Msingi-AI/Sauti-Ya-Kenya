@@ -1,14 +1,10 @@
 import modal
 import os
 
-# 1. DEFINITION: Use 'App' instead of 'Stub'
 app = modal.App("sauti-distill")
 
-# 2. PERSISTENCE: Create a Volume to store checkpoints and data
-# This is like a shared hard drive that persists between your functions.
 sauti_volume = modal.Volume.from_name("sauti-volume", create_if_missing=True)
 
-# 3. ENVIRONMENT: Add 'libsndfile1' and 'ffmpeg' for audio processing
 image = (
     modal.Image.debian_slim()
     .apt_install("libsndfile1", "ffmpeg")  # <--- CRITICAL FIX
@@ -18,7 +14,6 @@ image = (
     )
 )
 
-# 4. PATHS: Define where the volume lives inside the container
 VOLUME_PATH = "/root/data"
 
 @app.function(
