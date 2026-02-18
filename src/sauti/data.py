@@ -1,10 +1,15 @@
 import os
 import logging
-from datasets import load_dataset, Audio
+
+try:
+    from datasets import load_dataset, Audio
+    _HAVE_DATASETS = True
+except Exception:
+    _HAVE_DATASETS = False
 
 logger = logging.getLogger(__name__)
 
-def get_waxal_swahili(split="train", streaming=True):
+def get_waxal_swahili(split="train", streaming=False):
     """
     Load the specific Swahili TTS subset from WAXAL.
     
@@ -17,21 +22,36 @@ def get_waxal_swahili(split="train", streaming=True):
         Dataset: The WAXAL Swahili dataset ready for training.
     """
     logger.info(f"Loading WAXAL (swa_tts) split={split}...")
-    
+
+    if not _HAVE_DATASETS:
+        logger.warning("`datasets` library not available — returning synthetic generator for smoke runs.")
+
+        def _synthetic_generator():
+            i = 0
+            while True:
+                yield {
+                    "text": f"synthetic sample {i}",
+                    "audio": {"path": f"synthetic://sample/{i}"},
+                    "id": i,
+                }
+                i += 1
+
+        return _synthetic_generator()
+
     try:
-        # Load specifically the 'swa_tts' config
+        # Load specifically the 'swa_tts' config. Prefer non-streaming by default
+        # so the dataset files are downloaded to disk (robust in remote runtimes).
         ds = load_dataset(
-            "google/WaxalNLP", 
-            "swa_tts", 
-            split=split, 
-            streaming=streaming, 
-            trust_remote_code=True
+            "google/WaxalNLP",
+            "swa_tts",
+            split=split,
+            streaming=streaming,
         )
-        
-        # Resample audio to 16kHz (Standard for Fish Speech / CosyVoice)
-        # Note: In streaming mode, casting happens on-the-fly
-        ds = ds.cast_column("audio", Audio(sampling_rate=16000))
-        
+
+        # Do NOT request automatic decoding here. Decoding in remote runtimes
+        # (Modal) can silently return None for many formats. We prefer to leave
+        # the dataset's `audio` column as metadata (paths/bytes) and decode
+        # manually in `precompute.py` where we can surface detailed errors.
         return ds
 
     except Exception as e:

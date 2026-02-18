@@ -9,17 +9,28 @@ sauti_volume = modal.Volume.from_name("sauti-volume", create_if_missing=True)
 
 # 3. THE IMAGE (Updated for proper imports)
 image = (
-    modal.Image.debian_slim()
-    .apt_install("libsndfile1", "ffmpeg")
-    .pip_install(
-        "torch", "transformers", "datasets", "torchaudio", "librosa", "soundfile",
-        "accelerate", "huggingface-hub", "numpy", "scipy", "wandb", "pyyaml"
-    )
-    # This is the magic line. It finds the local 'src' folder 
-    # and makes 'sauti' importable as 'from sauti.xxx'
-    .add_local_python_source("src") 
-    .add_local_file("run_distill.py", remote_path="/root/run_distill.py")
-    .add_local_dir("configs", remote_path="/root/configs")
+        modal.Image.debian_slim(python_version="3.11")
+        .apt_install("libsndfile1", "ffmpeg", "git", "build-essential")
+        # Ensure modern build tooling to avoid wheel/build surprises
+        .pip_install("pip", "setuptools", "wheel")
+        # Layer 1: install tokenizer backends and foundations first (pin protobuf)
+        .pip_install(
+            "numpy", "scipy", "pyyaml", "wandb",
+            "sentencepiece", "tiktoken", "protobuf>=4.25,<6"
+        )
+        # Layer 2: install transformers and heavier ML stack
+        .pip_install(
+            "torch", "torchaudio", "transformers>=4.45.0", "datasets", "accelerate", "huggingface-hub",
+            "librosa", "soundfile", "tokenizers", "torchcodec"
+        )
+        # Run quick smoke checks at build-time to fail-fast on missing backends
+        .run_commands(
+            "python -c \"import importlib.util as iu; print('sentencepiece', bool(iu.find_spec('sentencepiece'))); print('tiktoken', bool(iu.find_spec('tiktoken')));\"",
+            "python -c \"import transformers; print('transformers', transformers.__version__)\"",
+        )
+        .add_local_python_source("src")
+        .add_local_file("run_distill.py", remote_path="/root/run_distill.py")
+        .add_local_dir("configs", remote_path="/root/configs")
 )
 
 VOLUME_PATH = "/root/data"
@@ -35,57 +46,35 @@ VOLUME_PATH = "/root/data"
     timeout=3600
 )
 def precompute_max_items(max_items: int = 2000):
-    if "HF_TOKEN" in os.environ:
-        os.environ["HUGGINGFACE_HUB_TOKEN"] = os.environ["HF_TOKEN"]
-
-    # Try importing the `sauti` package. If it isn't found, add common
-    # mounted paths to sys.path so the package can be imported from the repo.
-    try:
-        from sauti.precompute import precompute_teacher_activations
-    except Exception as e:
+        # Ensure mounted src is importable
         import sys
-        print("Initial import failed:", e)
-        # Debug sys.path and available directories
-        try:
-            print("sys.path before fix:", sys.path)
-        except Exception:
-            pass
-
-        # Common mount locations Modal may use: /root/project/src, /root/src, /root/project
-        candidate_paths = ["/root/project/src", "/root/src", "/root/project", "/root"]
-        for p in candidate_paths:
+        for p in ["/root/src", "/root/src/sauti", "/root/project", "/root"]:
             if os.path.exists(p) and p not in sys.path:
-                print(f"Adding {p} to sys.path")
                 sys.path.insert(0, p)
 
-        # Also try adding the sauti package dir directly if present
-        sauti_dir = "/root/src/sauti"
-        if os.path.exists(sauti_dir) and sauti_dir not in sys.path:
-            print(f"Adding {sauti_dir} to sys.path")
-            sys.path.insert(0, sauti_dir)
+        # Configure HuggingFace tokens (Modal secret may set HF_TOKEN or hf-token)
+        if "HF_TOKEN" in os.environ:
+            os.environ["HUGGINGFACE_HUB_TOKEN"] = os.environ["HF_TOKEN"]
+        if "hf-token" in os.environ:
+            os.environ["HUGGINGFACE_HUB_TOKEN"] = os.environ["hf-token"]
 
-        # Retry import
+        # Persist HF datasets cache to the mounted volume so downloads survive
+        # across runs and decoding can read local files reliably.
+        os.environ["HF_DATASETS_CACHE"] = f"{VOLUME_PATH}/hf_cache"
+        os.makedirs(os.environ["HF_DATASETS_CACHE"], exist_ok=True)
+
+        from sauti.precompute import precompute_teacher_activations_whisper as precompute_teacher_activations
+
+        out_dir = f"{VOLUME_PATH}/teacher_activations"
+        os.makedirs(out_dir, exist_ok=True)
+
+        print(f"🚀 Initializing Whisper Teacher Inference. Target: {max_items} items.")
+        print(f"📂 HF_DATASETS_CACHE={os.environ.get('HF_DATASETS_CACHE')}")
+        # Run precompute (non-streaming, dataset will be downloaded into the HF cache)
+        precompute_teacher_activations("google/WaxalNLP", "swa_tts", out_dir=out_dir, max_items=max_items, count_stream=True)
+
         try:
-            from sauti.precompute import precompute_teacher_activations
-        except Exception as e2:
-            print("Retry import failed:", e2)
-            # Show directory listings for debugging
-            try:
-                print("/root listing:", os.listdir("/root"))
-                if os.path.exists("/root/project"):
-                    print("/root/project listing:", os.listdir("/root/project"))
-                if os.path.exists("/root/project/src"):
-                    print("/root/project/src listing:", os.listdir("/root/project/src"))
-            except Exception as de:
-                print("Listing error:", de)
-            raise
-
-    out_dir = f"{VOLUME_PATH}/teacher_activations"
-    print(f"🚀 Writing activations to persistent volume: {out_dir}")
-    
-    os.makedirs(out_dir, exist_ok=True)
-    
-    precompute_teacher_activations("google/WaxalNLP", "swa_tts", out_dir=out_dir, max_items=max_items)
-    
-    sauti_volume.commit()
-    print("✅ Volume committed. Data is safe.")
+            sauti_volume.commit()
+            print("✅ Volume committed. Data is safe.")
+        except Exception:
+            print("⚠️ Volume commit not supported or failed.")
