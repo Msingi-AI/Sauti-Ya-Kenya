@@ -358,10 +358,21 @@ def precompute_teacher_activations_whisper(dataset_name, config_name, out_dir, m
                 model_dtype = torch.float32
             input_features = input_features.to(device=device, dtype=model_dtype)
             with torch.no_grad():
-                outputs = whisper(input_features=input_features)
+                # Use the encoder directly to avoid needing decoder inputs
+                try:
+                    encoder_outputs = whisper.encoder(input_features=input_features)
+                except Exception:
+                    # fallback to calling model and letting it compute encoder+decoder
+                    encoder_outputs = whisper.encoder(input_features)
 
-            # encoder hidden states usually at outputs.last_hidden_state
-            hidden = getattr(outputs, 'last_hidden_state', None) or getattr(outputs, 'encoder_last_hidden_state', None)
+            # encoder hidden states usually at encoder_outputs.last_hidden_state
+            hidden = getattr(encoder_outputs, 'last_hidden_state', None)
+            if hidden is None:
+                # some versions return tuple-like outputs
+                try:
+                    hidden = encoder_outputs[0]
+                except Exception:
+                    hidden = None
             if hidden is None:
                 logger.warning("Whisper produced no hidden states for sample %d", i)
                 continue
