@@ -8,3 +8,4 @@ accelerate
 huggingface-hub
 numpy
 scipy
+wandb

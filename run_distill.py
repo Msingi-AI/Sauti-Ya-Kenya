@@ -30,6 +30,17 @@ def run_distillation():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logging.info(f"🚀 Starting Distillation on {device}...")
 
+    # Initialize Weights & Biases if API key is provided
+    use_wandb = False
+    try:
+        import os as _os
+        if _os.environ.get("WANDB_API_KEY"):
+            import wandb as _wandb
+            _wandb.init(project=cfg.get('project', {}).get('name', 'sauti-distill'), config=cfg)
+            use_wandb = True
+    except Exception:
+        logging.info("W&B not configured or failed to initialize; continuing without W&B")
+
     # 1. Load the frozen Teacher (Fish Speech 1.5)
     logging.info(f"Loading Teacher: {cfg['teacher']['model_id']}...")
     teacher = AutoModel.from_pretrained(cfg['teacher']['model_id'], trust_remote_code=True).to(device)
@@ -205,6 +216,17 @@ def run_distillation():
 
         if step % cfg['project']['log_interval'] == 0:
             logging.info(f"Step {step}: Loss = {total_loss.item():.4f}")
+            if use_wandb:
+                try:
+                    _wandb.log({
+                        'step': step,
+                        'loss/total': total_loss.item(),
+                        'loss/representation': loss_repr.item() if isinstance(loss_repr, torch.Tensor) else float(loss_repr),
+                        'loss/mel': mel_loss.item() if isinstance(mel_loss, torch.Tensor) else float(mel_loss),
+                        'loss/distill': distill_loss.item() if isinstance(distill_loss, torch.Tensor) else float(distill_loss),
+                    }, step=step)
+                except Exception:
+                    logging.exception("W&B logging failed at step %s", step)
 
         if step >= 100:
             logging.info("Reached smoke-test step limit (100). Exiting.")

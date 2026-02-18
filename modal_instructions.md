@@ -23,6 +23,14 @@ Example (Modal CLI):
 1. In the Modal dashboard: create a new Secret with name `hf-token` and paste your HF token.
 2. Or with CLI (if available): `modal secret create hf-token` and follow prompts.
 
+Also create a secret for Weights & Biases (W&B) API key if you want experiment logging:
+
+```powershell
+modal secret create wandb
+```
+
+The Modal functions will pick up `WANDB_API_KEY` from the `wandb` secret when present.
+
 Run precompute (teacher activations)
 -----------------------------------
 

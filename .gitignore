@@ -5,6 +5,9 @@ __pycache__/
 *.so
 .Python
 env/
+venv/Scripts/
+venv/bin/
+.venv/
 build/
 develop-eggs/
 dist/
