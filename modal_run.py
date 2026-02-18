@@ -62,6 +62,12 @@ def precompute_max_items(max_items: int = 2000):
     if "HF_TOKEN" in os.environ:
         os.environ["HUGGINGFACE_HUB_TOKEN"] = os.environ["HF_TOKEN"]
 
+    import sys
+    # Ensure the mounted project directory is on sys.path in the Modal container
+    project_root = "/root/project"
+    if project_root not in sys.path and os.path.exists(project_root):
+        sys.path.insert(0, project_root)
+
     from src.sauti.precompute import precompute_teacher_activations
 
     # Write to the VOLUME, not the ephemeral project folder
@@ -110,7 +116,12 @@ def run_full_distill():
     Run the full distillation using data from the Volume.
     """
     import sys
-    
+
+    # Ensure the mounted project directory is on sys.path in the Modal container
+    project_root = "/root/project"
+    if project_root not in sys.path and os.path.exists(project_root):
+        sys.path.insert(0, project_root)
+
     # Point your training script to look for data in the Volume
     # You might need to update your 'run_distill.py' to accept a data_dir argument
     # or set an environment variable.
