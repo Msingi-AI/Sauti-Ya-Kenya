@@ -2,7 +2,7 @@
 """
 __version__ = "0.1.0"
 
-from .data import prepare_waxal_dataset
+from .data import get_waxal_swahili as prepare_waxal_dataset
 from .distill import Distiller
 from .finetune import finetune_student
 from .inference import synthesize
